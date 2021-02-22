@@ -35,11 +35,11 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         id_df.set_index('p', inplace = True)
     
         # type and label first
-        self.type = None
+        self.rdf_type = None
         try:
-        	self.type = id_df.loc['http://www.w3.org/1999/02/22-rdf-syntax-ns#type','o'].replace('urn:p-lod:id:','')
+        	self.rdf_type = id_df.loc['http://www.w3.org/1999/02/22-rdf-syntax-ns#type','o'].replace('urn:p-lod:id:','')
         except:
-        	self.type = None
+        	self.rdf_type = None
 
 
         self.label = None
@@ -62,7 +62,6 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         except:
         	self.p_in_p_url = None
 
-
         self.wikidata_url = None
         try:
         	self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
@@ -76,7 +75,8 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         else:
         	self.identifier = None
 
-        # convenience (remove if too much overhead?)
+        # extras
+        # if with_extras:
         self._sparql_results_as_html_table = id_df.to_html()
         self._id_df = id_df
 
@@ -122,11 +122,13 @@ SELECT ?o WHERE { p-lod:$identifier <$predicate> ?o . }
         qt = Template("""
 PREFIX plod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?concept WHERE {
+SELECT DISTINCT ?concept ?label WHERE {
  
     plod:$identifier ^plod:spatially-within*/^plod:created-on-surface-of*/^plod:is-part-of* ?component .
     ?component a plod:artwork-component .
     ?component plod:depicts ?concept .
+
+    OPTIONAL { ?concept <http://www.w3.org/2000/01/rdf-schema#label> ?label }
 
     # when this is part of the PALP interface, this clause can select "smallest 
     # clickable spatial unit" that will be shown to public via its own page
@@ -152,19 +154,24 @@ SELECT DISTINCT ?concept WHERE {
         identifier = self.identifier
 
         qt = Template("""
-PREFIX plod: <urn:p-lod:id:>
+PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?within ?action ?color  WHERE {
+SELECT DISTINCT ?within ?type ?label ?geojson ?action ?color  WHERE {
     
-    BIND ( plod:$resource AS ?resource )
+    BIND ( p-lod:$resource AS ?resource )
    
-    ?component plod:depicts ?resource .
+    ?component p-lod:depicts ?resource .
 
-    ?component plod:is-part-of+/plod:created-on-surface-of/plod:spatially-within* ?within .
-    ?within a plod:$level_of_detail
+    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?within .
+    ?within a p-lod:$level_of_detail
+
+
+    OPTIONAL { ?within a ?type }
+    OPTIONAL { ?within p-lod:geojson ?geojson }
+    OPTIONAL { ?within <http://www.w3.org/2000/01/rdf-schema#label> ?label }
  
-    OPTIONAL { ?component plod:has-action ?action . }
-    OPTIONAL { ?component plod:has-color  ?color . }
+    OPTIONAL { ?component p-lod:has-action ?action . }
+    OPTIONAL { ?component p-lod:has-color  ?color . }
 
 } ORDER BY ?within""")
 
