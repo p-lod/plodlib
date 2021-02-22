@@ -188,15 +188,19 @@ SELECT DISTINCT ?within ?action ?color  WHERE {
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?spatial_id ?type WHERE { 
+SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE { 
   { p-lod:$identifier p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
     ?feature p-lod:spatially-within* ?spatial_id .
     ?feature a p-lod:feature  .
     OPTIONAL { ?spatial_id a ?type }
+    OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
+    OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
     UNION
     { p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
       OPTIONAL { ?spatial_id a ?type }
+      OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
+      OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
   }""")
         results = g.query(qt.substitute(identifier = identifier))
@@ -224,7 +228,6 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
         df = df.applymap(str)
     
         return df.values.tolist()
-
 
 ## instances_of ##
     def instances_of(self):
@@ -266,21 +269,5 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         return df.values.tolist()
 
 
-## for command line ###
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description='Interact with the P-LOD triplestore.')
-    parser.add_argument('-m', '--method')
-    parser.add_argument('arg_r')
-
-    args = parser.parse_args()
-
-    r = PLODResource(args.arg_r)
-
-    if args.method:
-    	method = args.method
-    	print(getattr(r, method)())
-    else:
-        print(r.label)
 
     
