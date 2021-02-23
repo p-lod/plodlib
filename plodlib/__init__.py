@@ -256,6 +256,7 @@ SELECT DISTINCT ?instance WHERE { ?instance a p-lod:$identifier }""")
         return df.values.tolist()
 
 
+
 ## used_as_predicate_by ##
     def used_as_predicate_by(self):
         # Connect to the remote triplestore with read-only connection
