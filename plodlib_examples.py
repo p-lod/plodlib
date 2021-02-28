@@ -7,7 +7,7 @@ for r in r_list:
 	c = plodlib.PLODResource(r)
 	print(f'''*Made instance of PLODResource for "{r}" now reading from returned object
   Identifier: {c.identifier} (as passed: {c._identifier_parameter})
-  Type: {c.type}
+  Type: {c.rdf_type}
   Label: {c.label}
   P-in-P URL: {c.p_in_p_url}
   Wikidata URL: {c.wikidata_url}

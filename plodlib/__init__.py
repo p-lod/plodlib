@@ -277,5 +277,8 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         return df.values.tolist()
 
 
+## dunder methods
+    def __str__(self):
+        return self.label
 
     
