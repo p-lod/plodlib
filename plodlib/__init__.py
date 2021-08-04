@@ -3,6 +3,7 @@
 
 from string import Template
 
+import json
 import pandas as pd
 
 import rdflib as rdf
@@ -48,13 +49,6 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         except:
         	self.label = None
 
-        # now in alphabetical order
-        self.geojson = None
-        try:
-            self.geojson = id_df.loc['urn:p-lod:id:geojson','o']
-        except:
-        	self.geojson = None
-
 
         self.p_in_p_url = None
         try:
@@ -68,7 +62,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         except:
         	self.wikidata_url = None
         
-        # set identifer if it exists. None otherwise. Preserve identifier as passed
+        # set identifier if it exists. None otherwise. Preserve identifier as passed
         self._identifier_parameter = identifier
         if len(id_df.index) > 0:
         	self.identifier = identifier
@@ -80,6 +74,29 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         self._sparql_results_as_html_table = id_df.to_html()
         self._id_df = id_df
 
+
+    @property
+    def geojson(self):
+        try:
+            my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
+            my_geojson_d['id'] = self.identifier
+            my_geojson_d['properties'] = {'title':self.identifier}
+            my_geojson = json.dumps(my_geojson_d)
+        except:
+            dw_l = self.depicted_where()
+            if len(dw_l):
+
+                my_geojson_d = {"type": "FeatureCollection", "features":[]}
+                for g in dw_l:
+                    f = json.loads(g[3])
+                    f['id'] = g[0]
+                    f['properties'] = {'title' : g[0]}
+                    my_geojson_d['features'].append(f)
+                my_geojson = json.dumps(my_geojson_d)
+            else:
+                my_geojson = None
+
+        return my_geojson
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
@@ -135,7 +152,7 @@ SELECT DISTINCT ?concept ?label WHERE {
     #?component plod:is-part-of+/plod:created-on-surface-of/plod:spatially-within* ?within .
     #?within a plod:####within_resolution .
 
-} ORDER BY ?depiction""")
+} ORDER BY ?concept""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
@@ -182,6 +199,7 @@ SELECT DISTINCT ?within ?type ?label ?geojson ?action ?color  WHERE {
         df = df.applymap(str)
 
         return df.values.tolist()
+
 
    ## spatial_hierarchy_up ##
     def spatial_hierarchy_up(self):
@@ -236,6 +254,7 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
     
         return df.values.tolist()
 
+
 ## instances_of ##
     def instances_of(self):
         # Connect to the remote triplestore with read-only connection
@@ -248,13 +267,18 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?instance WHERE { ?instance a p-lod:$identifier }""")
+SELECT DISTINCT ?instance ?type ?label ?geojson WHERE
+{   ?instance a p-lod:$identifier .
+
+    OPTIONAL { ?instance a ?type }
+    OPTIONAL { ?instance <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?instance p-lod:geojson ?geojson }
+ }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
     
         return df.values.tolist()
-
 
 
 ## used_as_predicate_by ##
