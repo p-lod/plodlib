@@ -79,9 +79,17 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     def geojson(self):
         try:
             my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
-            my_geojson_d['id'] = self.identifier
-            my_geojson_d['properties'] = {'title':self.identifier}
+
+            if my_geojson_d['type'] == 'FeatureCollection':
+                for f in my_geojson_d['features']:
+                    f['id'] = self.identifier
+                    f['properties'] = {'title':self.identifier}
+            else:
+                my_geojson_d['id'] = self.identifier
+                my_geojson_d['properties'] = {'title':self.identifier}
+
             my_geojson = json.dumps(my_geojson_d)
+
         except:
             dw_l = self.depicted_where()
             if len(dw_l):
@@ -252,6 +260,42 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
     
+        return df.values.tolist()
+
+## in_region ##
+    @property
+    def in_region(self):
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
+                                                       context_aware = False,
+                                                       returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+    PREFIX p-lod: <urn:p-lod:id:>
+    SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE {
+
+      { p-lod:$identifier p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
+        ?feature p-lod:spatially-within* ?spatial_id .
+        ?feature a p-lod:feature  .
+        OPTIONAL { ?spatial_id a ?type }
+        OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
+        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+        }
+        UNION
+        { p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
+          OPTIONAL { ?spatial_id a ?type }
+          OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
+          OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+        }
+        FILTER EXISTS { ?type a p-lod:region}
+      }""")
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        df = df.applymap(str)
+
         return df.values.tolist()
 
 
