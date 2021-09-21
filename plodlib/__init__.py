@@ -345,6 +345,34 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         return df.values.tolist()
 
 
+## images_luna_labels ##
+    def images_luna_labels(self):
+
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
+                                                       context_aware = False,
+                                                       returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+        PREFIX p-lod: <urn:p-lod:id:>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?label 
+        WHERE {
+        ?subject p-lod:depicts p-lod:$identifier .
+        ?subject a p-lod:luna-image .
+        ?subject rdfs:label ?label
+         }""")
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        df = df.applymap(str)
+            
+        return df.values.tolist()
+
+    ## <iframe id="widgetPreview" frameBorder="0"  width="700px"  height="350px"  border="0px" style="border:0px solid white"  src="https://umassamherst.lunaimaging.com/luna/servlet/view/search?search=SUBMIT&embedded=true&q=PALP_11258&cic=umass%7E14%7E14&widgetFormat=javascript"></iframe>
+
 ## dunder methods
     def __str__(self):
         return self.label
