@@ -346,6 +346,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 
 
 ## images_luna_labels ##
+    @property
     def images_luna_labels(self):
 
         # Connect to the remote triplestore with read-only connection
