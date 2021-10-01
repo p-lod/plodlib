@@ -5,6 +5,7 @@ from string import Template
 
 import json
 import pandas as pd
+import requests
 
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
@@ -345,9 +346,9 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         return df.values.tolist()
 
 
-## images_luna_labels ##
+## images_from_luna ##
     @property
-    def images_luna_labels(self):
+    def images_from_luna(self):
 
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
@@ -370,10 +371,31 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
             
-        return df.values.tolist()
+        l = df.values.tolist()
+        q = ""
+        for luna_image in l:
+            #url = f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={luna_image[0]}'
+            #print(url)
+            q = q + luna_image[0] + ' OR '
 
-    ## <iframe id="widgetPreview" frameBorder="0"  width="700px"  height="350px"  border="0px" style="border:0px solid white"  src="https://umassamherst.lunaimaging.com/luna/servlet/view/search?search=SUBMIT&embedded=true&q=PALP_11258&cic=umass%7E14%7E14&widgetFormat=javascript"></iframe>
+        url = requests.get(f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={q}')
+        text = url.text
+        data = json.loads(text)
+        # luna_image.append(data['results'][0]['urlSize4'])
+        return_list = []
+        for r in data['results']:
+            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r['urlSize4']])
+            #print('\n\n')
 
+
+        #url = requests.get("https://jsonplaceholder.typicode.com/users")
+        #text = url.text
+
+
+        return return_list # df.values.tolist()
+
+    # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
+    # j['results'][0]['urlSize4']
 ## dunder methods
     def __str__(self):
         return self.label
