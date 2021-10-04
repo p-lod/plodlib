@@ -92,17 +92,20 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
             my_geojson = json.dumps(my_geojson_d)
 
         except:
-            dw_l = self.depicted_where()
-            if len(dw_l):
+            try:
+                dw_l = self.depicted_where()
+                if len(dw_l):
 
-                my_geojson_d = {"type": "FeatureCollection", "features":[]}
-                for g in dw_l:
-                    f = json.loads(g[3])
-                    f['id'] = g[0]
-                    f['properties'] = {'title' : g[0]}
-                    my_geojson_d['features'].append(f)
-                my_geojson = json.dumps(my_geojson_d)
-            else:
+                    my_geojson_d = {"type": "FeatureCollection", "features":[]}
+                    for g in dw_l:
+                        f = json.loads(g[-1])
+                        f['id'] = g[0]
+                        f['properties'] = {'title' : g[0]}
+                        my_geojson_d['features'].append(f)
+                    my_geojson = json.dumps(my_geojson_d)
+                else:
+                    my_geojson = None
+            except:
                 my_geojson = None
 
         return my_geojson
@@ -170,7 +173,7 @@ SELECT DISTINCT ?concept ?label WHERE {
 
 
     ## depicted_where ##
-    def depicted_where(self, level_of_detail = 'space'):
+    def depicted_where(self, level_of_detail = 'feature'):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
                                                        context_aware = False,
@@ -182,19 +185,20 @@ SELECT DISTINCT ?concept ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?within ?type ?label ?geojson ?action ?color  WHERE {
+SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
     ?component p-lod:depicts ?resource .
 
-    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?within .
-    ?within a p-lod:$level_of_detail
+    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?id .
+    ?id a p-lod:$level_of_detail
 
 
-    OPTIONAL { ?within a ?type }
-    OPTIONAL { ?within p-lod:geojson ?geojson }
-    OPTIONAL { ?within <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?id a ?type }
+    OPTIONAL { ?id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within ?within }
+    OPTIONAL { ?id p-lod:geojson ?geojson }
  
     OPTIONAL { ?component p-lod:has-action ?action . }
     OPTIONAL { ?component p-lod:has-color  ?color . }
@@ -384,12 +388,13 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         # luna_image.append(data['results'][0]['urlSize4'])
         return_list = []
         for r in data['results']:
-            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r['urlSize4']])
-            #print('\n\n')
+            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],r['urlSize4']])
+            # print(f'{r["id"]}\n\n')
 
 
         #url = requests.get("https://jsonplaceholder.typicode.com/users")
         #text = url.text
+        # <iframe id="widgetPreview" frameBorder="0"  width="700px"  height="350px"  border="0px" style="border:0px solid white"  src="https://umassamherst.lunaimaging.com/luna/servlet/detail/umass~14~14~99562~1272567?embedded=true&cic=umass%7E14%7E14&widgetFormat=javascript&widgetType=detail&controls=1&nsip=1" ></iframe>
 
 
         return return_list # df.values.tolist()
