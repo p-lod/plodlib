@@ -79,6 +79,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     @property
     def geojson(self):
         try:
+            print("Looking for p-lod:geojson predicate.")
             my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
 
             if my_geojson_d['type'] == 'FeatureCollection':
@@ -93,7 +94,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         except:
             try:
-                dw_l = self.depicted_where()
+                dw_l = self.depicted_where(level_of_detail='space')
                 if len(dw_l):
 
                     my_geojson_d = {"type": "FeatureCollection", "features":[]}
