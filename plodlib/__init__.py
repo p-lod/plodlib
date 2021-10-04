@@ -236,7 +236,7 @@ SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE {
     OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
     UNION
-    { p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
+    { p-lod:$identifier p-lod:spatially-within* ?spatial_id  . 
       OPTIONAL { ?spatial_id a ?type }
       OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
       OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
@@ -389,7 +389,12 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         # luna_image.append(data['results'][0]['urlSize4'])
         return_list = []
         for r in data['results']:
-            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],r['urlSize4']])
+            try:
+                img_url = r['urlSize4']
+            except KeyError:
+                img_url = r['urlSize2']
+
+            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url])
             # print(f'{r["id"]}\n\n')
 
 
