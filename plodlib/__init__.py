@@ -394,7 +394,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
             except KeyError:
                 img_url = r['urlSize2']
 
-            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url])
+            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url,r['displayName']])
             # print(f'{r["id"]}\n\n')
 
 
