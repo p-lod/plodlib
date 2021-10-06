@@ -377,25 +377,28 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         df = df.applymap(str)
             
         l = df.values.tolist()
-        q = ""
-        for luna_image in l:
-            #url = f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={luna_image[0]}'
-            #print(url)
-            q = q + luna_image[0] + ' OR '
+        if len(l):
+            q = ""
+            for luna_image in l:
+                #url = f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={luna_image[0]}'
+                #print(url)
+                q = q + luna_image[0] + ' OR '
+            
+            url = requests.get(f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={q}')
+            text = url.text
+            data = json.loads(text)
+            # luna_image.append(data['results'][0]['urlSize4'])
+            return_list = []
+            for r in data['results']:
+                try:
+                    img_url = r['urlSize4']
+                except KeyError:
+                    img_url = r['urlSize2']
 
-        url = requests.get(f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={q}')
-        text = url.text
-        data = json.loads(text)
-        # luna_image.append(data['results'][0]['urlSize4'])
-        return_list = []
-        for r in data['results']:
-            try:
-                img_url = r['urlSize4']
-            except KeyError:
-                img_url = r['urlSize2']
-
-            return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url,r['displayName']])
-            # print(f'{r["id"]}\n\n')
+                return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url,r['displayName']])
+                # print(f'{r["id"]}\n\n')
+        else:
+            return_list = []
 
 
         #url = requests.get("https://jsonplaceholder.typicode.com/users")
