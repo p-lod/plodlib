@@ -366,7 +366,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT DISTINCT ?label ?l_record ?l_media ?l_batch
+        SELECT DISTINCT ?label ?l_record ?l_media ?l_batch ?l_description
         WHERE {
         ?subject p-lod:depicts p-lod:$identifier .
         ?subject a p-lod:luna-image .
@@ -374,6 +374,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         ?subject p-lod:x-luna-record-id ?l_record .
         ?subject p-lod:x-luna-media-id ?l_media .
         ?subject p-lod:x-luna-batch-id ?l_batch .
+        ?subject p-lod:x-luna-description ?l_description .
          }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
