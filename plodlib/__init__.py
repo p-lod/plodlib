@@ -215,6 +215,8 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?geojson  WHERE {
         return df.values.tolist()
 
 
+
+
    ## spatial_hierarchy_up ##
     def spatial_hierarchy_up(self):
         # Connect to the remote triplestore with read-only connection
@@ -268,6 +270,35 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
     
         return df.values.tolist()
 
+## spatially_within
+    @property
+    def spatially_within(self):
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
+                                                       context_aware = False,
+                                                       returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+    PREFIX p-lod: <urn:p-lod:id:>
+    SELECT ?spatial_id ?type ?label ?geojson WHERE {
+
+        p-lod:$identifier p-lod:spatially-within ?spatial_id  . 
+
+        ?spatial_id a ?type .
+        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
+        ?spatial_id p-lod:geojson ?geojson .
+        
+      } LIMIT 1""")
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        df = df.applymap(str)
+
+        return df.values.tolist()
+     
+
 ## in_region ##
     @property
     def in_region(self):
@@ -281,23 +312,16 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
 
         qt = Template("""
     PREFIX p-lod: <urn:p-lod:id:>
-    SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE {
+    SELECT ?spatial_id ?type ?label ?geojson WHERE {
 
-      { p-lod:$identifier p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
-        ?feature p-lod:spatially-within* ?spatial_id .
-        ?feature a p-lod:feature  .
-        OPTIONAL { ?spatial_id a ?type }
-        OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
-        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-        }
-        UNION
-        { p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
-          OPTIONAL { ?spatial_id a ?type }
-          OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
-          OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-        }
-        FILTER EXISTS { ?type a p-lod:region}
-      }""")
+        p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
+
+        ?spatial_id a ?type .
+        ?spatial_id a p-lod:region .
+        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
+        ?spatial_id p-lod:geojson ?geojson .
+        
+      } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
