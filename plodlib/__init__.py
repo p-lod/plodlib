@@ -24,10 +24,10 @@ class PLODResource(object):
         	self.identifier = None
         	return
 
-    	# Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
         
         qt = Template("""
@@ -122,9 +122,9 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
 
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -146,9 +146,9 @@ SELECT ?o WHERE { p-lod:$identifier <$predicate> ?o . }
     ## get_depicted_concepts ##
     def depicts_concepts(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -180,9 +180,9 @@ SELECT DISTINCT ?concept ?label WHERE {
     ## depicted_where ##
     def depicted_where(self, level_of_detail = 'feature'):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -224,9 +224,9 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?geojson  WHERE {
    ## spatial_hierarchy_up ##
     def spatial_hierarchy_up(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -258,9 +258,9 @@ SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE {
 ## spatial_children ##
     def spatial_children(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -278,9 +278,9 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
     @property
     def spatially_within(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -307,9 +307,9 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
     @property
     def in_region(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -336,9 +336,9 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
 ## instances_of ##
     def instances_of(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -362,9 +362,9 @@ SELECT DISTINCT ?instance ?type ?label ?geojson WHERE
 ## used_as_predicate_by ##
     def used_as_predicate_by(self):
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
@@ -384,9 +384,9 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
     def images_from_luna(self):
 
         # Connect to the remote triplestore with read-only connection
-        store = rdf.plugin.get("SPARQLStore", rdf.store.Store)(endpoint="http://52.170.134.25:3030/plod_endpoint/query",
-                                                       context_aware = False,
-                                                       returnFormat = 'json')
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
         g = rdf.Graph(store)
 
         identifier = self.identifier
