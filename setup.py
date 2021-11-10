@@ -9,4 +9,5 @@ setup(name='plodlib',
       author_email='sebastian.heath@nyu.edu',
       url='https://github.com/p-lod/plodlib/',
       packages=['plodlib'],
+      install_requires='shapely'
      )

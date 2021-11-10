@@ -7,12 +7,16 @@ import json
 import pandas as pd
 import requests
 
+from shapely.ops import transform
+
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
 
 
+
 # Define a class
 class PLODResource(object):
+
     def __init__(self,identifier = None):
 
         # could defaut to 'pompeii' along with its info?
