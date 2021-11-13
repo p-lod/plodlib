@@ -83,18 +83,18 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     @property
     def geojson(self):
         try:
-            print("Looking for p-lod:geojson predicate.")
-            my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
+            # print("Looking for p-lod:geojson predicate.")
+            #my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
 
-            if my_geojson_d['type'] == 'FeatureCollection':
-                for f in my_geojson_d['features']:
-                    f['id'] = self.identifier
-                    f['properties'] = {'title':self.identifier}
-            else:
-                my_geojson_d['id'] = self.identifier
-                my_geojson_d['properties'] = {'title':self.identifier}
+            # if my_geojson_d['type'] == 'FeatureCollection':
+            #     for f in my_geojson_d['features']:
+            #         f['id'] = self.identifier
+            #         f['properties'] = {'title':self.identifier}
+            # else:
+            #     my_geojson_d['id'] = self.identifier
+            #     my_geojson_d['properties'] = {'title':self.identifier}
 
-            my_geojson = json.dumps(my_geojson_d)
+            my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
 
         except:
             try:
@@ -104,8 +104,8 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
                     my_geojson_d = {"type": "FeatureCollection", "features":[]}
                     for g in dw_l:
                         f = json.loads(g[-1])
-                        f['id'] = g[0]
-                        f['properties'] = {'title' : g[0]}
+                        # f['id'] = g[0]
+                        # f['properties'] = {'title' : g[0]}
                         my_geojson_d['features'].append(f)
                     my_geojson = json.dumps(my_geojson_d)
                 else:
@@ -163,11 +163,6 @@ SELECT DISTINCT ?concept ?label WHERE {
     ?component plod:depicts ?concept .
 
     OPTIONAL { ?concept <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-
-    # when this is part of the PALP interface, this clause can select "smallest 
-    # clickable spatial unit" that will be shown to public via its own page
-    #?component plod:is-part-of+/plod:created-on-surface-of/plod:spatially-within* ?within .
-    #?within a plod:####within_resolution .
 
 } ORDER BY ?concept""")
         results = g.query(qt.substitute(identifier = identifier))
