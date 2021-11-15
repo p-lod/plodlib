@@ -12,8 +12,6 @@ from shapely.ops import transform
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
 
-
-
 # Define a class
 class PLODResource(object):
 
@@ -83,21 +81,13 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     @property
     def geojson(self):
         try:
-            # print("Looking for p-lod:geojson predicate.")
-            #my_geojson_d = json.loads(self._id_df.loc['urn:p-lod:id:geojson','o'])
-
-            # if my_geojson_d['type'] == 'FeatureCollection':
-            #     for f in my_geojson_d['features']:
-            #         f['id'] = self.identifier
-            #         f['properties'] = {'title':self.identifier}
-            # else:
-            #     my_geojson_d['id'] = self.identifier
-            #     my_geojson_d['properties'] = {'title':self.identifier}
-
+            # if the there is geojson, use it
             my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
 
         except:
+            # if no, geojson, try and find some. this may well develop over time
             try:
+                # note that depicted_where will return an empty list so check length after calling
                 dw_l = self.depicted_where(level_of_detail='space')
                 if len(dw_l):
 
@@ -111,6 +101,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
                 else:
                     my_geojson = None
             except:
+                # not sure how we can get here but the try needs it and is a form of (slow) robustness.
                 my_geojson = None
 
         return my_geojson
