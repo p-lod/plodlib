@@ -178,7 +178,7 @@ SELECT DISTINCT ?concept ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?geojson  WHERE {
+SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
@@ -196,7 +196,10 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?geojson  WH
     OPTIONAL { ?component p-lod:has-action ?action . }
     OPTIONAL { ?component p-lod:has-color  ?color . }
     OPTIONAL { ?component p-lod:best-image ?o . 
-               ?best_image rdfs:label ?o .}
+               ?best_image rdfs:label ?o .
+               ?best_image p-lod:x-luna-record-id ?l_record .
+               ?best_image p-lod:x-luna-media-id  ?l_media .
+               ?best_image p-lod:x-luna-batch-id  ?l_batch .}
 
 } ORDER BY ?within""")
 
