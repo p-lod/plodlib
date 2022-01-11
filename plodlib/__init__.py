@@ -155,6 +155,8 @@ SELECT DISTINCT ?concept ?label WHERE {
 
     OPTIONAL { ?concept <http://www.w3.org/2000/01/rdf-schema#label> ?label }
 
+    
+
 } ORDER BY ?concept""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -176,7 +178,7 @@ SELECT DISTINCT ?concept ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?geojson  WHERE {
+SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
@@ -193,6 +195,8 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?geojson  WHERE {
  
     OPTIONAL { ?component p-lod:has-action ?action . }
     OPTIONAL { ?component p-lod:has-color  ?color . }
+    OPTIONAL { ?component p-lod:best-image ?o . 
+               ?best_image rdfs:label ?o .}
 
 } ORDER BY ?within""")
 
