@@ -206,10 +206,12 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?l_record ?l
        # resource = what you're looking for, level_of_detail = spatial resolution at which to list results 
         results = g.query(qt.substitute(resource = identifier, level_of_detail = level_of_detail))
 
+        
+
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
 
-        return df.values.tolist()
+        return df.to_json(orient='records')
 
 
 
@@ -387,53 +389,22 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT DISTINCT ?label ?l_record ?l_media ?l_batch ?l_description
+        SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description
         WHERE {
-        ?subject p-lod:depicts p-lod:$identifier .
-        ?subject a p-lod:luna-image .
-        ?subject rdfs:label ?label .
-        ?subject p-lod:x-luna-record-id ?l_record .
-        ?subject p-lod:x-luna-media-id ?l_media .
-        ?subject p-lod:x-luna-batch-id ?l_batch .
-        ?subject p-lod:x-luna-description ?l_description .
+        ?urn p-lod:depicts p-lod:$identifier .
+        ?urn a p-lod:luna-image .
+        ?urn rdfs:label ?label .
+        ?urn p-lod:x-luna-record-id ?l_record .
+        ?urn p-lod:x-luna-media-id ?l_media .
+        ?urn p-lod:x-luna-batch-id ?l_batch .
+        ?urn p-lod:x-luna-description ?l_description .
          }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        # df = df.applymap(str)
 
-        return df.values.tolist()
-            
-        l = df.values.tolist()
-        if len(l):
-            q = ""
-            for luna_image in l:
-                #url = f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={luna_image[0]}'
-                #print(url)
-                q = q + luna_image[0] + ' OR '
-            
-            url = requests.get(f'http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q={q}')
-            text = url.text
-            data = json.loads(text)
-            # luna_image.append(data['results'][0]['urlSize4'])
-            return_list = []
-            for r in data['results']:
-                try:
-                    img_url = r['urlSize4']
-                except KeyError:
-                    img_url = r['urlSize2']
+        return df.to_json(orient='records')
 
-                return_list.append([r['fieldValues'][1]['Archive_ID'][0],r["id"],img_url,r['displayName']])
-                # print(f'{r["id"]}\n\n')
-        else:
-            return_list = []
-
-
-        #url = requests.get("https://jsonplaceholder.typicode.com/users")
-        #text = url.text
-        # <iframe id="widgetPreview" frameBorder="0"  width="700px"  height="350px"  border="0px" style="border:0px solid white"  src="https://umassamherst.lunaimaging.com/luna/servlet/detail/umass~14~14~99562~1272567?embedded=true&cic=umass%7E14%7E14&widgetFormat=javascript&widgetType=detail&controls=1&nsip=1" ></iframe>
-
-
-        return return_list # df.values.tolist()
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
