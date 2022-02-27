@@ -88,12 +88,12 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
             # if no, geojson, try and find some. this may well develop over time
             try:
                 # note that depicted_where will return an empty list so check length after calling
-                dw_l = self.depicted_where(level_of_detail='space')
-                if len(dw_l):
+                dw_j = json.loads(self.depicted_where(level_of_detail='space'))
+                if len(dw_j):
 
                     my_geojson_d = {"type": "FeatureCollection", "features":[]}
-                    for g in dw_l:
-                        f = json.loads(g[-1])
+                    for g in dw_j:
+                        f = json.loads(g['geojson'])
                         # f['id'] = g[0]
                         # f['properties'] = {'title' : g[0]}
                         my_geojson_d['features'].append(f)
@@ -109,7 +109,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
         # predicate should be a fully qualified url or urn as a string.
-        # returns a list.
+        # returns json array of keyed dictionaries.
 
 
         # Connect to the remote triplestore with read-only connection
@@ -120,21 +120,21 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         identifier = self.identifier
         if identifier == None:
-            return []
+            return json.dumps([])
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT ?o WHERE { p-lod:$identifier <$predicate> ?o . }
+SELECT ?object WHERE { p-lod:$identifier <$predicate> ?o . }
 """)
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = id_df.applymap(str)
+        # df = id_df.applymap(str)
 
-        return df.values.tolist()
+        return df.to_json(orient = 'records')
 
 
-    ## get_depicted_concepts ##
+    ## depicts_concepts ##
     def depicts_concepts(self):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -147,22 +147,21 @@ SELECT ?o WHERE { p-lod:$identifier <$predicate> ?o . }
         qt = Template("""
 PREFIX plod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?concept ?label WHERE {
+SELECT DISTINCT ?urn ?label WHERE {
  
     plod:$identifier ^plod:spatially-within*/^plod:created-on-surface-of*/^plod:is-part-of* ?component .
     ?component a plod:artwork-component .
-    ?component plod:depicts ?concept .
+    ?component plod:depicts ?urn .
 
-    OPTIONAL { ?concept <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
 
     
 
 } ORDER BY ?concept""")
+
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
-    
-        return df.values.tolist()
+        return df.to_json(orient = 'records')
 
 
     ## depicted_where ##
@@ -228,26 +227,25 @@ SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?l_record ?l
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE { 
+SELECT DISTINCT ?urn ?type ?label ?geojson WHERE { 
   { p-lod:$identifier p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
-    ?feature p-lod:spatially-within* ?spatial_id .
+    ?feature p-lod:spatially-within* ?urn .
     ?feature a p-lod:feature  .
-    OPTIONAL { ?spatial_id a ?type }
-    OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
-    OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?urn a ?type }
+    OPTIONAL { ?urn p-lod:geojson ?geojson }
+    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
     UNION
-    { p-lod:$identifier p-lod:spatially-within* ?spatial_id  . 
-      OPTIONAL { ?spatial_id a ?type }
-      OPTIONAL { ?spatial_id p-lod:geojson ?geojson }
-      OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    { p-lod:$identifier p-lod:spatially-within* ?urn  . 
+      OPTIONAL { ?urn a ?type }
+      OPTIONAL { ?urn p-lod:geojson ?geojson }
+      OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
   }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
-    
-        return df.values.tolist()
+        
+        return df.to_json(orient='records')
 
 
 ## spatial_children ##
@@ -262,12 +260,12 @@ SELECT DISTINCT ?spatial_id ?type ?label ?geojson WHERE {
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$identifier }""")
+SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
     
-        return df.values.tolist()
+        return df.to_json(orient="records")
 
 ## spatially_within
     @property
@@ -282,20 +280,18 @@ SELECT DISTINCT ?spatial_id WHERE { ?spatial_id p-lod:spatially-within p-lod:$id
 
         qt = Template("""
     PREFIX p-lod: <urn:p-lod:id:>
-    SELECT ?spatial_id ?type ?label ?geojson WHERE {
+    SELECT ?urn ?type ?label ?geojson WHERE {
 
-        p-lod:$identifier p-lod:spatially-within ?spatial_id  . 
+        p-lod:$identifier p-lod:spatially-within ?urn  . 
 
-        ?spatial_id a ?type .
-        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
-        ?spatial_id p-lod:geojson ?geojson .
+        ?urn a ?type .
+        OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
+        ?urn p-lod:geojson ?geojson .
         
       } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
-
-        return df.values.tolist()
+        return df.to_json(orient="records")
      
 
 ## in_region ##
