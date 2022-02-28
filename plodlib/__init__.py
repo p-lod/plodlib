@@ -94,8 +94,6 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
                     my_geojson_d = {"type": "FeatureCollection", "features":[]}
                     for g in dw_j:
                         f = json.loads(g['geojson'])
-                        # f['id'] = g[0]
-                        # f['properties'] = {'title' : g[0]}
                         my_geojson_d['features'].append(f)
                     my_geojson = json.dumps(my_geojson_d)
                 else:
@@ -305,14 +303,14 @@ SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
 
         qt = Template("""
     PREFIX p-lod: <urn:p-lod:id:>
-    SELECT ?spatial_id ?type ?label ?geojson WHERE {
+    SELECT ?urn ?type ?label ?geojson WHERE {
 
-        p-lod:$identifier p-lod:spatially-within+ ?spatial_id  . 
+        p-lod:$identifier p-lod:spatially-within+ ?urn  . 
 
-        ?spatial_id a ?type .
-        ?spatial_id a p-lod:region .
-        OPTIONAL { ?spatial_id <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
-        ?spatial_id p-lod:geojson ?geojson .
+        ?urn a ?type .
+        ?urn a p-lod:region .
+        OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
+        ?urn p-lod:geojson ?geojson .
         
       } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
