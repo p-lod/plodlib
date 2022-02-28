@@ -124,13 +124,11 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT ?object WHERE { p-lod:$identifier <$predicate> ?o . }
+SELECT ?urn WHERE { p-lod:$identifier <$predicate> ?o . }
 """)
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        # df = id_df.applymap(str)
-
         return df.to_json(orient = 'records')
 
 
@@ -177,20 +175,20 @@ SELECT DISTINCT ?urn ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?id ?type ?label ?within ?action ?color ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
+SELECT DISTINCT ?urn ?type ?label ?within ?action ?color ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
     ?component p-lod:depicts ?resource .
 
-    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?id .
-    ?id a p-lod:$level_of_detail
+    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
+    ?urn a p-lod:$level_of_detail
 
 
-    OPTIONAL { ?id a ?type }
-    OPTIONAL { ?id <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?urn a ?type }
+    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within ?within }
-    OPTIONAL { ?id p-lod:geojson ?geojson }
+    OPTIONAL { ?urn p-lod:geojson ?geojson }
  
     OPTIONAL { ?component p-lod:has-action ?action . }
     OPTIONAL { ?component p-lod:has-color  ?color . }
@@ -319,9 +317,8 @@ SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
       } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
 
-        return df.values.tolist()
+        return df.to_json(orient="records")
 
 
 ## instances_of ##
@@ -336,18 +333,17 @@ SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?instance ?type ?label ?geojson WHERE
-{   ?instance a p-lod:$identifier .
+SELECT DISTINCT ?urn ?type ?label ?geojson WHERE
+{   ?urn a p-lod:$identifier .
 
-    OPTIONAL { ?instance a ?type }
-    OPTIONAL { ?instance <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-    OPTIONAL { ?instance p-lod:geojson ?geojson }
+    OPTIONAL { ?urn a ?type }
+    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+    OPTIONAL { ?urn p-lod:geojson ?geojson }
  }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
     
-        return df.values.tolist()
+        return df.to_json(orient="records")
 
 
 ## used_as_predicate_by ##
@@ -367,7 +363,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
     
-        return df.values.tolist()
+        return df.to_json(orient="records")
 
 
 ## images_from_luna ##
