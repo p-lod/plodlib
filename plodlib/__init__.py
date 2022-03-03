@@ -9,8 +9,66 @@ import requests
 
 from shapely.ops import transform
 
+from urllib.request import urlopen
+
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
+
+# Convenience functions
+def luna_tilde_val(luna_urn):
+  if luna_urn.startswith("urn:p-lod:id:luna_img_PALP"):
+    tilde_val = "14"
+
+  if luna_urn.startswith("urn:p-lod:id:luna_img_PPM"):
+    tilde_val = "16"
+
+  return tilde_val
+
+def add_luna_info(row):
+  
+  img_src = None #default if no URLs present (probably means LUNA doesn't have image though triplestore thinks it does)
+  img_description = None
+
+  if row['urn'].startswith("urn:p-lod:id:luna_img_PALP"):
+    tilde_val = "14"
+
+  if row['urn'].startswith("urn:p-lod:id:luna_img_PPM"):
+    tilde_val = "16"
+  
+  luna_json = json.loads(urlopen(f'https://umassamherst.lunaimaging.com/luna/servlet/as/fetchMediaSearch?mid=umass~{tilde_val}~{tilde_val}~{row["l_record"]}~{row["l_media"]}&fullData=true').read())
+  
+  if len(luna_json):
+
+    img_attributes = json.loads(luna_json[0]['attributes'])
+
+    if 'image_description_english' in img_attributes.keys():
+      img_description = img_attributes['image_description_english']
+    else:
+      try:
+        if   tilde_val == '14':
+          img_description = json.loads(luna_json[0]['fieldValues'])[2]['value']
+        elif tilde_val == '16':
+          img_description = json.loads(luna_json[0]['fieldValues'])[1]['value']
+        else:
+          img_description = f"unrecognized collection {tilde_val}"
+      except:
+        img_description = "Trying to get descriptoin failed"
+    
+
+    if 'urlSize4' in img_attributes.keys(): # use size 4, sure, but only if there's nothing else
+      img_src = img_attributes['urlSize4']
+    if 'urlSize2' in img_attributes.keys(): # preferred
+      img_src = img_attributes['urlSize2']
+    elif 'urlSize3' in img_attributes.keys():
+      img_src = img_attributes['urlSize3']
+    else:
+      img_src = img_attributes['urlSize1']
+
+  row['l_img_url'] = img_src
+  row['l_current_description'] = img_description
+
+  return row
+
 
 # Define a class
 class PLODResource(object):
@@ -392,8 +450,10 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         # df = df.applymap(str)
+        #
+        # df['l_image_url'], df['current_l_description'] = img_src_from_luna_info(df['urn'],df['l_record'],df['l_media'])
 
-        return df.to_json(orient='records')
+        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
