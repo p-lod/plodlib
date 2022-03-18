@@ -135,32 +135,37 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         self._sparql_results_as_html_table = id_df.to_html()
         self._id_df = id_df
 
+    @property
+    def images(self):
+      luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
+      if len(pd.DataFrame([])):
+        return luna_df.to_json(orient = 'records')
+      
 
     @property
     def geojson(self):
+      try:
+        # if the there is geojson, use it
+        my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
+
+      except:
+        # if no, geojson, try and find some. this may well develop over time
         try:
-            # if the there is geojson, use it
-            my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
-
+          # note that depicted_where will return an empty list so check length after calling
+          dw_j = json.loads(self.depicted_where(level_of_detail='space'))
+          if len(dw_j):
+              my_geojson_d = {"type": "FeatureCollection", "features":[]}
+              for g in dw_j:
+                f = json.loads(g['geojson'])
+                my_geojson_d['features'].append(f)
+              my_geojson = json.dumps(my_geojson_d)
+          else:
+              my_geojson = None
         except:
-            # if no, geojson, try and find some. this may well develop over time
-            try:
-                # note that depicted_where will return an empty list so check length after calling
-                dw_j = json.loads(self.depicted_where(level_of_detail='space'))
-                if len(dw_j):
+          # not sure how we can get here but the try needs it and is a form of (slow) robustness.
+          my_geojson = None
 
-                    my_geojson_d = {"type": "FeatureCollection", "features":[]}
-                    for g in dw_j:
-                        f = json.loads(g['geojson'])
-                        my_geojson_d['features'].append(f)
-                    my_geojson = json.dumps(my_geojson_d)
-                else:
-                    my_geojson = None
-            except:
-                # not sure how we can get here but the try needs it and is a form of (slow) robustness.
-                my_geojson = None
-
-        return my_geojson
+      return my_geojson
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
