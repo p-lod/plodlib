@@ -138,8 +138,10 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
     @property
     def images(self):
       luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
-      if len(pd.DataFrame([])):
+      if len(luna_df):
         return luna_df.to_json(orient = 'records')
+      else:
+        return []
       
 
     @property
