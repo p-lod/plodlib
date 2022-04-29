@@ -6,10 +6,12 @@ from string import Template
 import json
 import pandas as pd
 import requests
+import requests_cache
+requests_cache.install_cache('demo_cache')
 
 from shapely.ops import transform
 
-from urllib.request import urlopen
+
 
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
@@ -35,7 +37,7 @@ def add_luna_info(row):
   if row['urn'].startswith("urn:p-lod:id:luna_img_PPM"):
     tilde_val = "16"
   
-  luna_json = json.loads(urlopen(f'https://umassamherst.lunaimaging.com/luna/servlet/as/fetchMediaSearch?mid=umass~{tilde_val}~{tilde_val}~{row["l_record"]}~{row["l_media"]}&fullData=true').read())
+  luna_json = json.loads(requests.get(f'https://umassamherst.lunaimaging.com/luna/servlet/as/fetchMediaSearch?mid=umass~{tilde_val}~{tilde_val}~{row["l_record"]}~{row["l_media"]}&fullData=true').text)
   
   if len(luna_json):
 
@@ -52,7 +54,7 @@ def add_luna_info(row):
         else:
           img_description = f"unrecognized collection {tilde_val}"
       except:
-        img_description = "Trying to get descriptoin failed"
+        img_description = "Trying to get description failed"
     
 
     if 'urlSize4' in img_attributes.keys(): # use size 4, sure, but only if there's nothing else
@@ -135,13 +137,68 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         self._sparql_results_as_html_table = id_df.to_html()
         self._id_df = id_df
 
-    @property
-    def images(self):
-      luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
-      if len(luna_df):
-        return luna_df.to_json(orient = 'records')
+
+    def gather_images(self):
+      # return format is urn (of image), depicts_urn, depicts_type, depicts_label, is_best_image, l_record, l_media, l_batch, l_description, geojson
+      if self.rdf_type == 'concept':
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+PREFIX p-lod: <urn:p-lod:id:>
+
+SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?space ?geojson  WHERE {
+   
+    BIND ( p-lod:$identifier AS ?identifier )
+   
+    ?component p-lod:depicts ?identifier .
+
+    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?space .
+               ?space a p-lod:space .
+               ?space p-lod:geojson ?geojson }
+
+
+             {
+               BIND ( true AS ?best_image)
+               ?component p-lod:best-image ?label . 
+               ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+               ?urn p-lod:x-luna-record-id   ?l_record .
+               ?urn p-lod:x-luna-media-id    ?l_media .
+               ?urn p-lod:x-luna-batch-id    ?l_batch . 
+               ?urn p-lod:x-luna-description ?l_description .
+               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+               } 
+              UNION 
+               {
+               BIND ( false AS ?best_image )
+               ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?tmp_f_urn .
+               ?tmp_f_urn a p-lod:feature .
+               ?urn p-lod:depicts ?tmp_f_urn .
+               ?urn p-lod:x-luna-record-id ?l_record .
+               ?urn p-lod:x-luna-media-id  ?l_media .
+               ?urn p-lod:x-luna-batch-id  ?l_batch .
+               ?urn p-lod:x-luna-description ?l_description .
+               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+               }
+               
+ 
+
+} ORDER BY DESC(?best_image)""")
+
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        return df.to_json(orient='records')
+
       else:
-        return []
+        luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
+        if len(luna_df):
+          return luna_df.to_json(orient = 'records')
+        else:
+          return []
       
 
     @property
@@ -237,17 +294,13 @@ SELECT DISTINCT ?urn ?label WHERE {
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-
 SELECT DISTINCT ?urn ?type ?label ?within ?action ?color ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
     ?component p-lod:depicts ?resource .
-
     ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
     ?urn a p-lod:$level_of_detail
-
-
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within ?within }
@@ -260,7 +313,6 @@ SELECT DISTINCT ?urn ?type ?label ?within ?action ?color ?best_image ?l_record ?
                ?best_image p-lod:x-luna-record-id ?l_record .
                ?best_image p-lod:x-luna-media-id  ?l_media .
                ?best_image p-lod:x-luna-batch-id  ?l_batch .}
-
 } ORDER BY ?within""")
 
        # resource = what you're looking for, level_of_detail = spatial resolution at which to list results 
@@ -456,9 +508,6 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
          }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        # df = df.applymap(str)
-        #
-        # df['l_image_url'], df['current_l_description'] = img_src_from_luna_info(df['urn'],df['l_record'],df['l_media'])
 
         return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
