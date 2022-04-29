@@ -191,7 +191,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.to_json(orient='records')
+        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
       else:
         luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
