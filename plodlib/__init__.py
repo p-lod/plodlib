@@ -183,9 +183,8 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+               FILTER NOT EXISTS { ?component p-lod:best-image ?label . }
                }
-               
- 
 
 } ORDER BY DESC(?best_image)""")
 
