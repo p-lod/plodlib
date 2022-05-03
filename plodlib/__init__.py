@@ -7,7 +7,7 @@ import json
 import pandas as pd
 import requests
 import requests_cache
-requests_cache.install_cache('demo_cache')
+requests_cache.install_cache('plodlib_cache')
 
 from shapely.ops import transform
 
@@ -150,8 +150,9 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?space ?geojson  WHERE {
+SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?space WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
    
@@ -164,8 +165,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
              {
                BIND ( true AS ?best_image)
-               ?component p-lod:best-image ?label . 
-               ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+               ?component p-lod:best-image ?urn .
                ?urn p-lod:x-luna-record-id   ?l_record .
                ?urn p-lod:x-luna-media-id    ?l_media .
                ?urn p-lod:x-luna-batch-id    ?l_batch . 
@@ -183,11 +183,42 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-               FILTER NOT EXISTS { ?component p-lod:best-image ?label . }
                }
+
 
 } ORDER BY DESC(?best_image)""")
 
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+
+      elif self.rdf_type in ['space','property','insula','region']:
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+PREFIX p-lod: <urn:p-lod:id:>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description WHERE {
+   
+    BIND ( p-lod:$identifier AS ?identifier )
+    ?urn p-lod:depicts ?feature .
+    ?feature a p-lod:feature .
+    ?feature p-lod:spatially-within* ?identifier.
+    
+    
+               ?urn p-lod:x-luna-record-id ?l_record .
+               ?urn p-lod:x-luna-media-id  ?l_media .
+               ?urn p-lod:x-luna-batch-id  ?l_batch .
+               ?urn p-lod:x-luna-description ?l_description .
+               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
+} LIMIT 100""")
+        
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         return df.apply(add_luna_info, axis = 1).to_json(orient='records')
@@ -274,7 +305,7 @@ SELECT DISTINCT ?urn ?label WHERE {
 
     
 
-} ORDER BY ?concept""")
+} ORDER BY ?urn""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
