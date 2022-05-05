@@ -185,7 +185,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                }
 
 
-} ORDER BY DESC(?best_image)""")
+} ORDER BY DESC(?best_image) LIMIT 50""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -203,7 +203,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description WHERE {
+SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
     ?urn p-lod:depicts ?feature .
@@ -216,7 +216,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description WHERE {
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
-} LIMIT 100""")
+} LIMIT 50""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -527,7 +527,11 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description
         WHERE {
-        ?urn p-lod:depicts p-lod:$identifier .
+
+       {?urn p-lod:depicts p-lod:$identifier .}
+        UNION
+        {p-lod:$identifier p-lod:best-image ?urn}
+
         ?urn a p-lod:luna-image .
         ?urn rdfs:label ?label .
         ?urn p-lod:x-luna-record-id ?l_record .
