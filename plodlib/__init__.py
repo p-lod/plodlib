@@ -152,16 +152,15 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?space WHERE {
+SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?feature WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
    
     ?component p-lod:depicts ?identifier .
 
-    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?space .
-               ?space a p-lod:space .
-               ?space p-lod:geojson ?geojson }
-
+    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
+               ?feature a p-lod:feature .
+               OPTIONAL { ?feature p-lod:geojson ?geojson } }
 
              {
                BIND ( true AS ?best_image)
