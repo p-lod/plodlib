@@ -185,7 +185,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                }
 
 
-} ORDER BY DESC(?best_image) LIMIT 50""")
+} ORDER BY DESC(?best_image) LIMIT 25""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -216,7 +216,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
-} LIMIT 50""")
+} LIMIT 25""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -544,6 +544,20 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 
         return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
+    def compare_depicts(self,to = 'pompeii'):
+        s_depicts_json = json.loads(self.depicts_concepts())
+
+        to_depicts_r = PLODResource(to)
+        to_depicts_json = json.loads(to_depicts_r.depicts_concepts())
+
+        s_depicts_df = pd.DataFrame(s_depicts_json)
+        to_depicts_df = pd.DataFrame(to_depicts_json)
+
+        u = set(s_depicts_df['urn']).union(set(to_depicts_df['urn']))
+        i = set(s_depicts_df['urn']).intersection(set(to_depicts_df['urn']))
+        d = set(s_depicts_df['urn']).difference(set(to_depicts_df['urn']))
+
+        return json.dumps({"union":list(u), "intersection": list(i), "difference": list(d)})
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
