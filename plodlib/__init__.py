@@ -7,7 +7,7 @@ import json
 import pandas as pd
 import requests
 import requests_cache
-requests_cache.install_cache('plodlib_cache')
+requests_cache.install_cache('plodlib_cache', backend='memory')
 
 from shapely.ops import transform
 
