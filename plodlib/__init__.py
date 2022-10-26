@@ -286,16 +286,20 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
         try:
           # note that depicted_where will return an empty list so check length after calling
           dw_j = json.loads(self.depicted_where(level_of_detail='space'))
+          print(len(dw_j))
           if len(dw_j):
               my_geojson_d = {"type": "FeatureCollection", "features":[]}
               for g in dw_j:
-                f = json.loads(g['geojson'])
-                my_geojson_d['features'].append(f)
+                if g['geojson'] != 'None':
+                  f = json.loads(g['geojson'])
+                  my_geojson_d['features'].append(f)
               my_geojson = json.dumps(my_geojson_d)
           else:
               my_geojson = None
+              print("Faled to parse geojson")
         except:
           # not sure how we can get here but the try needs it and is a form of (slow) robustness.
+          print("Faled to parse geojson")
           my_geojson = None
 
       return my_geojson
