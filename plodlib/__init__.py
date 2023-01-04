@@ -327,7 +327,7 @@ SELECT ?value WHERE { p-lod:$identifier <$predicate> ?value . }
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.to_json(orient = 'records')
+        return df['values'].to_json(orient = 'records')
 
 
     ## depicts_concepts ##
