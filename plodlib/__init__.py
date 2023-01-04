@@ -322,7 +322,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT ?urn WHERE { p-lod:$identifier <$predicate> ?o . }
+SELECT ?value WHERE { p-lod:$identifier <$predicate> ?value . }
 """)
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
