@@ -9,10 +9,6 @@ import requests
 import requests_cache
 requests_cache.install_cache('plodlib_cache')
 
-from shapely.ops import transform
-
-
-
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
 
@@ -162,7 +158,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?feature a p-lod:feature .
                OPTIONAL { ?feature p-lod:geojson ?geojson } }
 
-             {
+             #{
                BIND ( true AS ?best_image)
                ?component p-lod:best-image ?urn .
                ?urn p-lod:x-luna-record-id   ?l_record .
@@ -170,19 +166,19 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?urn p-lod:x-luna-batch-id    ?l_batch . 
                ?urn p-lod:x-luna-description ?l_description .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-               } 
-              UNION 
-               {
-               BIND ( false AS ?best_image )
-               ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within* ?tmp_f_urn .
-               ?tmp_f_urn a p-lod:feature .
-               ?urn p-lod:depicts ?tmp_f_urn .
-               ?urn p-lod:x-luna-record-id ?l_record .
-               ?urn p-lod:x-luna-media-id  ?l_media .
-               ?urn p-lod:x-luna-batch-id  ?l_batch .
-               ?urn p-lod:x-luna-description ?l_description .
-               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-               }
+              # } 
+              # UNION 
+              #  {
+              #  BIND ( false AS ?best_image )
+              #  ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within* ?tmp_f_urn .
+              #  ?tmp_f_urn a p-lod:feature .
+              #  ?urn p-lod:depicts ?tmp_f_urn .
+              #  ?urn p-lod:x-luna-record-id ?l_record .
+              #  ?urn p-lod:x-luna-media-id  ?l_media .
+              #  ?urn p-lod:x-luna-batch-id  ?l_batch .
+              #  ?urn p-lod:x-luna-description ?l_description .
+              #  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+              #  }
 
 
 } ORDER BY DESC(?best_image) limit 75""")
