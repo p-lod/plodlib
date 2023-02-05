@@ -148,7 +148,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?feature WHERE {
+SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?l_img_url ?feature WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
    
@@ -165,6 +165,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?urn p-lod:x-luna-media-id    ?l_media .
                ?urn p-lod:x-luna-batch-id    ?l_batch . 
                ?urn p-lod:x-luna-description ?l_description .
+               ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
               # } 
               # UNION 
@@ -185,7 +186,8 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        return df.to_json(orient='records')
 
       elif self.rdf_type in ['space','property','insula','region']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -199,7 +201,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description WHERE {
+SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
    { ?urn p-lod:depicts ?feature .
@@ -220,11 +222,13 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
                ?urn p-lod:x-luna-media-id  ?l_media .
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
+               ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 } limit 75""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
         return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
       elif self.rdf_type in ['feature']:
@@ -239,7 +243,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description WHERE {
+SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
    
     BIND ( p-lod:$identifier AS ?identifier )
     BIND ( p-lod:$identifier AS ?feature )
@@ -257,12 +261,14 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?feature ?l_description 
                ?urn p-lod:x-luna-media-id  ?l_media .
                ?urn p-lod:x-luna-batch-id  ?l_batch .
                ?urn p-lod:x-luna-description ?l_description .
+               ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 } limit 75""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        return df.to_json(orient='records')
       else:
         luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
         if len(luna_df):
