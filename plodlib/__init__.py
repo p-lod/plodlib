@@ -182,7 +182,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
               #  }
 
 
-} ORDER BY DESC(?best_image) limit 75""")
+} ORDER BY DESC(?best_image) limit 80""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -229,7 +229,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_d
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
-        return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        return df.to_json(orient='records')
 
       elif self.rdf_type in ['feature']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
