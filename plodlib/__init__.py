@@ -182,7 +182,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
               #  }
 
 
-} ORDER BY DESC(?best_image) limit 80""")
+} ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -224,7 +224,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_d
                ?urn p-lod:x-luna-description ?l_description .
                ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
-} limit 75""")
+}""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -263,7 +263,7 @@ SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_d
                ?urn p-lod:x-luna-description ?l_description .
                ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
-} limit 75""")
+}""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
