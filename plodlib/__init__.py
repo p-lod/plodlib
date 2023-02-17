@@ -158,7 +158,6 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?feature a p-lod:feature .
                OPTIONAL { ?feature p-lod:geojson ?geojson } }
 
-             #{
                BIND ( true AS ?best_image)
                ?component p-lod:best-image ?urn .
                ?urn p-lod:x-luna-record-id   ?l_record .
@@ -167,20 +166,6 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
                ?urn p-lod:x-luna-description ?l_description .
                ?urn p-lod:x-luna-url-3       ?l_img_url .
                OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-              # } 
-              # UNION 
-              #  {
-              #  BIND ( false AS ?best_image )
-              #  ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within* ?tmp_f_urn .
-              #  ?tmp_f_urn a p-lod:feature .
-              #  ?urn p-lod:depicts ?tmp_f_urn .
-              #  ?urn p-lod:x-luna-record-id ?l_record .
-              #  ?urn p-lod:x-luna-media-id  ?l_media .
-              #  ?urn p-lod:x-luna-batch-id  ?l_batch .
-              #  ?urn p-lod:x-luna-description ?l_description .
-              #  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-              #  }
-
 
 } ORDER BY DESC(?best_image)""")
 
@@ -202,33 +187,35 @@ PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
-   
-    BIND ( p-lod:$identifier AS ?identifier )
-   { ?urn p-lod:depicts ?feature .
-    ?feature a p-lod:feature .
-    ?feature p-lod:spatially-within* ?identifier .
-    }
-    UNION 
-    {
-      ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within+ ?identifier .
-      ?component p-lod:best-image ?urn .
-      
-      ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
-      ?feature a p-lod:feature .
-    }
-    
-    
-               ?urn p-lod:x-luna-record-id ?l_record .
-               ?urn p-lod:x-luna-media-id  ?l_media .
-               ?urn p-lod:x-luna-batch-id  ?l_batch .
-               ?urn p-lod:x-luna-description ?l_description .
-               ?urn p-lod:x-luna-url-3       ?l_img_url .
-               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
+
+BIND ( p-lod:$identifier AS ?identifier )
+{
+?urn p-lod:depicts ?feature .
+?feature a p-lod:feature .
+?identifier ^p-lod:spatially-within+ ?feature .
+}
+UNION 
+{
+
+?identifier ^p-lod:spatially-within*/^p-lod:created-on-surface-of*/^p-lod:is-part-of* ?component .
+?component p-lod:best-image ?urn .
+
+?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
+?feature a p-lod:feature .
+}
+
+?urn p-lod:x-luna-record-id ?l_record .
+?urn p-lod:x-luna-media-id  ?l_media .
+?urn p-lod:x-luna-batch-id  ?l_batch .
+?urn p-lod:x-luna-description ?l_description .
+?urn p-lod:x-luna-url-3       ?l_img_url .
+
+OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
+
 }""")
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
         return df.to_json(orient='records')
 
       elif self.rdf_type in ['feature']:
