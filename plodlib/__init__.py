@@ -231,25 +231,27 @@ PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
-   
-    BIND ( p-lod:$identifier AS ?identifier )
-    BIND ( p-lod:$identifier AS ?feature )
-   { ?urn p-lod:depicts ?identifier .
-    }
-    UNION 
-    {
-      ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?identifier .
-      ?component p-lod:best-image ?urn .
-      
-    }
-    
-    
-               ?urn p-lod:x-luna-record-id ?l_record .
-               ?urn p-lod:x-luna-media-id  ?l_media .
-               ?urn p-lod:x-luna-batch-id  ?l_batch .
-               ?urn p-lod:x-luna-description ?l_description .
-               ?urn p-lod:x-luna-url-3       ?l_img_url .
-               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
+
+BIND ( p-lod:$identifier AS ?identifier )
+BIND ( p-lod:$identifier AS ?feature )
+{
+?urn p-lod:depicts ?identifier .
+}
+UNION 
+{
+#?component p-lod:is-part-of+/p-lod:created-on-surface-of ?identifier .
+?identifier ^p-lod:created-on-surface-of/^p-lod:is-part-of+ ?component .
+?component p-lod:best-image ?urn .
+
+}
+
+?urn p-lod:x-luna-record-id ?l_record .
+?urn p-lod:x-luna-media-id  ?l_media .
+?urn p-lod:x-luna-batch-id  ?l_batch .
+?urn p-lod:x-luna-description ?l_description .
+?urn p-lod:x-luna-url-3       ?l_img_url .
+
+OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 }""")
         
         results = g.query(qt.substitute(identifier = identifier))
