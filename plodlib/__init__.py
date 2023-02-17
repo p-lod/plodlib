@@ -333,7 +333,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
         qt = Template("""
 PREFIX plod: <urn:p-lod:id:>
 
-SELECT DISTINCT ?urn ?label WHERE {
+SELECT ?urn ?label (COUNT(*) AS ?count) WHERE {
  
     plod:$identifier ^plod:spatially-within*/^plod:created-on-surface-of*/^plod:is-part-of* ?component .
     ?component a plod:artwork-component .
@@ -343,7 +343,7 @@ SELECT DISTINCT ?urn ?label WHERE {
 
     
 
-} ORDER BY ?urn""")
+} GROUP BY ?urn ?label ORDER BY ?urn""")
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
