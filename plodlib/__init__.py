@@ -598,9 +598,11 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
       difference_right = set(right_depicts_df['urn']).difference(set(left_depicts_df['urn']))
 
 
-      return json.dumps({ "difference_left": list(difference_left),
+      return json.dumps({ "left_urn": f"urn:p-lod:id:{self.identifier}",
+                           "difference_left": list(difference_left),
                           "intersection": list(intersection),
-                          "difference_right": list(difference_right)})
+                          "difference_right": list(difference_right),
+                          "right_urn": f"urn:p-lod:id:{right_depicts_r.identifier}"})
 
     def compare_depicted(self, right, level_of_detail = 'space'):
       left_depicted_json = json.loads(self.depicted_where(level_of_detail))
@@ -615,11 +617,11 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
       intersection = set(left_depicted_df['urn']).intersection(set(right_depicted_df['urn']))
       difference_right = set(right_depicted_df['urn']).difference(set(left_depicted_df['urn']))
 
-      return json.dumps({ "left": self.identifier,
+      return json.dumps({ "left_urn": f"urn:p-lod:id:{self.identifier}",
                           "difference_left": list(difference_left),
                           "intersection": list(intersection),
                           "difference_right": list(difference_right),
-                          "right": right_depicted_r.identifier})
+                          "right_urn": f"urn:p-lod:id:{right_depicted_r.identifier}"})
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
