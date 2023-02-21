@@ -611,15 +611,15 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
       left_depicted_df = pd.DataFrame(left_depicted_json)
       right_depicted_df = pd.DataFrame(right_depicted_json)
 
-      
-
       difference_left = set(left_depicted_df['urn']).difference(set(right_depicted_df['urn']))
       intersection = set(left_depicted_df['urn']).intersection(set(right_depicted_df['urn']))
       difference_right = set(right_depicted_df['urn']).difference(set(left_depicted_df['urn']))
 
-      return json.dumps({ "difference_left": list(difference_left),
+      return json.dumps({ "left": self.identifier,
+                          "difference_left": list(difference_left),
                           "intersection": list(intersection),
-                          "difference_right": list(difference_right)})
+                          "difference_right": list(difference_right),
+                          "right": right_depicted_r.identifier})
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
