@@ -602,11 +602,11 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
                           "difference_left": list(difference_left),
                           "difference_right": list(difference_right)})
 
-    def compare_depicted(self, right):
-      left_depicted_json = json.loads(self.depicted_where())
+    def compare_depicted(self, right, level_of_detail = 'space'):
+      left_depicted_json = json.loads(self.depicted_where(level_of_detail))
 
       right_depicted_r = PLODResource(right)
-      right_depicted_json = json.loads(right_depicted_r.depicted_where())
+      right_depicted_json = json.loads(right_depicted_r.depicted_where(level_of_detail))
 
       left_depicted_df = pd.DataFrame(left_depicted_json)
       right_depicted_df = pd.DataFrame(right_depicted_json)
