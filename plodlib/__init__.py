@@ -583,20 +583,43 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 
         return df.apply(add_luna_info, axis = 1).to_json(orient='records')
 
-    def compare_depicts(self,to = 'pompeii'):
-        s_depicts_json = json.loads(self.depicts_concepts())
+    def compare_depicts(self,right):
+      left_depicts_json = json.loads(self.depicts_concepts())
 
-        to_depicts_r = PLODResource(to)
-        to_depicts_json = json.loads(to_depicts_r.depicts_concepts())
+      right_depicts_r = PLODResource(right)
+      right_depicts_json = json.loads(right_depicts_r.depicts_concepts())
 
-        s_depicts_df = pd.DataFrame(s_depicts_json)
-        to_depicts_df = pd.DataFrame(to_depicts_json)
+      left_depicts_df = pd.DataFrame(left_depicts_json)
+      right_depicts_df = pd.DataFrame(right_depicts_json)
 
-        u = set(s_depicts_df['urn']).union(set(to_depicts_df['urn']))
-        i = set(s_depicts_df['urn']).intersection(set(to_depicts_df['urn']))
-        d = set(s_depicts_df['urn']).difference(set(to_depicts_df['urn']))
+      
+      intersection = set(left_depicts_df['urn']).intersection(set(right_depicts_df['urn']))
+      difference_left = set(left_depicts_df['urn']).difference(set(right_depicts_df['urn']))
+      difference_right = set(right_depicts_df['urn']).difference(set(left_depicts_df['urn']))
 
-        return json.dumps({"union":list(u), "intersection": list(i), "difference": list(d)})
+
+      return json.dumps({ "intersection": list(intersection),
+                          "difference_left": list(difference_left),
+                          "difference_right": list(difference_right)})
+
+    def compare_depicted(self, right):
+      left_depicted_json = json.loads(self.depicted_where())
+
+      right_depicted_r = PLODResource(right)
+      right_depicted_json = json.loads(right_depicted_r.depicted_where())
+
+      left_depicted_df = pd.DataFrame(left_depicted_json)
+      right_depicted_df = pd.DataFrame(right_depicted_json)
+
+      
+      intersection = set(left_depicted_df['urn']).intersection(set(right_depicted_df['urn']))
+      difference_left = set(left_depicted_df['urn']).difference(set(right_depicted_df['urn']))
+      difference_right = set(right_depicted_df['urn']).difference(set(left_depicted_df['urn']))
+
+
+      return json.dumps({ "intersection": list(intersection),
+                          "difference_left": list(difference_left),
+                          "difference_right": list(difference_right)})
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
