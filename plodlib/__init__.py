@@ -362,7 +362,7 @@ SELECT ?urn ?label (COUNT(*) AS ?count) WHERE {
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?type ?label ?within ?action ?color ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
+SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
@@ -371,7 +371,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?action ?color ?best_image ?l_record ?
     ?urn a p-lod:$level_of_detail
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within ?within }
+    OPTIONAL { ?urn p-lod:spatially-within ?within }
     OPTIONAL { ?urn p-lod:geojson ?geojson }
  
     OPTIONAL { ?component p-lod:has-action ?action . }
