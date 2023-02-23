@@ -516,13 +516,15 @@ SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?type ?label ?geojson WHERE
+SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
 {   ?urn a p-lod:$identifier .
 
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     OPTIONAL { ?urn p-lod:geojson ?geojson }
- } ORDER BY ?urn""")
+    OPTIONAL { ?component p-lod:depicts ?urn ;
+               a p-lod:artwork-component . }
+ } GROUP BY ?urn ?type ?label ?geojson ORDER BY ?urn""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
     

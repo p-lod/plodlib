@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='plodlib',
-      version='0.1.0',
+      version='0.1.1',
       description='Library and CLI for accessing the P-LOD triplestore',
       author='Sebastian Heath',
       author_email='sebastian.heath@nyu.edu',
