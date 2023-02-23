@@ -522,7 +522,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     OPTIONAL { ?urn p-lod:geojson ?geojson }
- }""")
+ } ORDER BY ?urn""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
     
