@@ -516,8 +516,11 @@ SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
 SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
-{   ?urn a p-lod:$identifier .
+{   ?urn rdf:type/rdfs:subClassOf* p-lod:$identifier .
 
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
