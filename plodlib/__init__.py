@@ -75,8 +75,8 @@ class PLODResource(object):
 
         # could defaut to 'pompeii' along with its info?
         if identifier == None:
-        	self.identifier = None
-        	return
+          self.identifier = None
+          return
 
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -354,6 +354,11 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
     ?identifier ^p-lod:spatially-within+ ?within_depicts .
     ?within_depicts a p-lod:space .
     ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within+ ?within_depicts .
+  }
+  OPTIONAL {
+    ?identifier a p-lod:feature .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?identifier .
+    ?component p-lod:best-image ?within_depicts .
   }
 
 } GROUP BY ?urn ?label ORDER BY ?urn""")
