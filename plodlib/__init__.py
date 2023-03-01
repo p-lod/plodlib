@@ -6,8 +6,8 @@ from string import Template
 import json
 import pandas as pd
 import requests
-import requests_cache
-requests_cache.install_cache('plodlib_cache')
+#import requests_cache
+#requests_cache.install_cache('plodlib_cache')
 
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
