@@ -331,17 +331,23 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
         identifier = self.identifier
 
         qt = Template("""
-PREFIX plod: <urn:p-lod:id:>
+PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT ?urn ?label (COUNT(*) AS ?count) WHERE {
- 
-    plod:$identifier ^plod:spatially-within*/^plod:created-on-surface-of*/^plod:is-part-of* ?component .
-    ?component a plod:artwork-component .
-    ?component plod:depicts ?urn .
+SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?arc_depicts ; separator = '||') AS ?arcs) WHERE {
 
-    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+  BIND ( p-lod:$identifier AS ?identifier )
 
-    
+  ?identifier ^p-lod:spatially-within*/^p-lod:created-on-surface-of*/^p-lod:is-part-of* ?component .
+  ?component a p-lod:artwork-component .
+  ?component p-lod:depicts ?urn .
+
+  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+  OPTIONAL {
+    ?identifier a p-lod:space .
+    ?identifier ^p-lod:spatially-within+ ?arc_depicts .
+    ?arc_depicts a p-lod:feature .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?arc_depicts .
+  }
 
 } GROUP BY ?urn ?label ORDER BY ?urn""")
 
