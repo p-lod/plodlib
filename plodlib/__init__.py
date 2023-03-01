@@ -333,7 +333,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?arc_depicts ; separator = '||') AS ?arcs) WHERE {
+SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separator = '||') AS ?within_spatial_units_depict) WHERE {
 
   BIND ( p-lod:$identifier AS ?identifier )
 
@@ -344,9 +344,16 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?arc_depicts ; separator =
   OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
   OPTIONAL {
     ?identifier a p-lod:space .
-    ?identifier ^p-lod:spatially-within+ ?arc_depicts .
-    ?arc_depicts a p-lod:feature .
-    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?arc_depicts .
+    ?identifier ^p-lod:spatially-within+ ?within_depicts .
+    ?within_depicts a p-lod:feature .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?within_depicts .
+  }
+
+  OPTIONAL {
+    ?identifier a p-lod:property .
+    ?identifier ^p-lod:spatially-within+ ?within_depicts .
+    ?within_depicts a p-lod:space .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within+ ?within_depicts .
   }
 
 } GROUP BY ?urn ?label ORDER BY ?urn""")
