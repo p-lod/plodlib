@@ -342,11 +342,19 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
   ?component p-lod:depicts ?urn .
 
   OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+  
   OPTIONAL {
-    ?identifier a p-lod:space .
+    ?identifier a p-lod:region .
     ?identifier ^p-lod:spatially-within+ ?within_depicts .
-    ?within_depicts a p-lod:feature .
-    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?within_depicts .
+    ?within_depicts a p-lod:insula .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within+ ?within_depicts .
+  }
+  
+  OPTIONAL {
+    ?identifier a p-lod:insula .
+    ?identifier ^p-lod:spatially-within+ ?within_depicts .
+    ?within_depicts a p-lod:property .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within+ ?within_depicts .
   }
 
   OPTIONAL {
@@ -355,6 +363,14 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
     ?within_depicts a p-lod:space .
     ?component p-lod:is-part-of*/p-lod:created-on-surface-of/p-lod:spatially-within+ ?within_depicts .
   }
+
+  OPTIONAL {
+    ?identifier a p-lod:space .
+    ?identifier ^p-lod:spatially-within+ ?within_depicts .
+    ?within_depicts a p-lod:feature .
+    ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?within_depicts .
+  }
+
   OPTIONAL {
     ?identifier a p-lod:feature .
     ?component p-lod:is-part-of*/p-lod:created-on-surface-of ?identifier .
