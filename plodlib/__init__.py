@@ -382,7 +382,7 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?geojson  WHERE {
+SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?l_description ?geojson  WHERE {
     
     BIND ( p-lod:$resource AS ?resource )
    
@@ -396,11 +396,11 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
  
     OPTIONAL { ?component p-lod:has-action ?action . }
     OPTIONAL { ?component p-lod:has-color  ?color . }
-    OPTIONAL { ?component p-lod:best-image ?o . 
-               ?best_image rdfs:label ?o .
+    OPTIONAL { ?component p-lod:best-image ?best_image .
                ?best_image p-lod:x-luna-record-id ?l_record .
                ?best_image p-lod:x-luna-media-id  ?l_media .
-               ?best_image p-lod:x-luna-batch-id  ?l_batch .}
+               ?best_image p-lod:x-luna-batch-id  ?l_batch .
+               ?best_image p-lod:x-luna-description ?l_description}
 } ORDER BY ?within""")
 
        # resource = what you're looking for, level_of_detail = spatial resolution at which to list results 
