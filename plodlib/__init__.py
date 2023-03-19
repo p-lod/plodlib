@@ -382,11 +382,11 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?l_description ?geojson  WHERE {
+SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?l_description ?l_img_url ?geojson  WHERE {
     
-    BIND ( p-lod:$resource AS ?resource )
+    BIND ( p-lod:$identifier AS ?identifier )
    
-    ?component p-lod:depicts ?resource .
+    ?component p-lod:depicts ?identifier .
     ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
     ?urn a p-lod:$level_of_detail
     OPTIONAL { ?urn a ?type }
@@ -400,11 +400,13 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
                ?best_image p-lod:x-luna-record-id ?l_record .
                ?best_image p-lod:x-luna-media-id  ?l_media .
                ?best_image p-lod:x-luna-batch-id  ?l_batch .
-               ?best_image p-lod:x-luna-description ?l_description}
+               ?best_image p-lod:x-luna-description ?l_description .
+               ?best_image p-lod:x-luna-url-3    ?l_img_url .
+               }
 } ORDER BY ?within""")
 
-       # resource = what you're looking for, level_of_detail = spatial resolution at which to list results 
-        results = g.query(qt.substitute(resource = identifier, level_of_detail = level_of_detail))
+       # identifier = what you're looking for, level_of_detail = spatial resolution at which to list results 
+        results = g.query(qt.substitute(identifier = identifier, level_of_detail = level_of_detail))
 
         
 
