@@ -152,7 +152,9 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
    
     BIND ( p-lod:$identifier AS ?identifier )
    
-    ?component p-lod:depicts ?identifier .
+    { ?component p-lod:depicts ?identifier . }
+    UNION
+    { ?component p-lod:depicts/p-lod:broader+ ?identifier }
 
     OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
                ?feature a p-lod:feature .
@@ -386,7 +388,10 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
     
     BIND ( p-lod:$identifier AS ?identifier )
    
-    ?component p-lod:depicts ?identifier .
+    { ?component p-lod:depicts ?identifier }
+    UNION
+    { ?component p-lod:depicts/p-lod:broader ?identifier }
+    
     ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
     ?urn a p-lod:$level_of_detail
     OPTIONAL { ?urn a ?type }
