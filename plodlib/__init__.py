@@ -580,9 +580,9 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
     
         return df.to_json(orient="records")
 
-## spatial_children ##
+## narrower ##
     @property
-    def narrower_depicted(self):
+    def narrower(self):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
                                            context_aware = False,
@@ -593,10 +593,14 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?label WHERE {
+SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
     ?urn p-lod:broader+ p-lod:$identifier .
     ?urn rdfs:label ?label .
-    ?anything p-lod:depicts ?urn . }
+
+     OPTIONAL { ?anything p-lod:depicts ?urn }
+  BIND ( IF(BOUND(?anything), "true", "false") AS ?is_depicted )
+  } ORDER BY ?label
+
 """)
         
         results = g.query(qt.substitute(identifier = identifier))
