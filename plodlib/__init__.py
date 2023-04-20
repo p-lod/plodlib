@@ -107,14 +107,20 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         	self.label = id_df.loc['http://www.w3.org/2000/01/rdf-schema#label','o']
         except:
         	self.label = None
-
+        
+        
+        self.broader = None
+        try:
+        	self.broader = id_df.loc['urn:p-lod:id:broader','o']
+        except:
+        	self.broader = None
 
         self.p_in_p_url = None
         try:
         	self.p_in_p_url = id_df.loc['urn:p-lod:id:p-in-p-url','o']
         except:
         	self.p_in_p_url = None
-
+        
         self.wikidata_url = None
         try:
         	self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
@@ -579,6 +585,8 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         df = df.applymap(str)
     
         return df.to_json(orient="records")
+
+
 
 ## narrower ##
     @property
