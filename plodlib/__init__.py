@@ -580,6 +580,30 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
     
         return df.to_json(orient="records")
 
+## spatial_children ##
+    @property
+    def narrower_depicted(self):
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+PREFIX p-lod: <urn:p-lod:id:>
+SELECT DISTINCT ?urn ?label WHERE {
+    ?urn p-lod:broader+ p-lod:$identifier .
+    ?urn rdfs:label ?label .
+    ?anything p-lod:depicts ?urn . }
+""")
+        
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        df = df.applymap(str)
+    
+        return df.to_json(orient="records")
 
 ## images_from_luna ##
     @property
