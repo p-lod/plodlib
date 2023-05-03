@@ -178,9 +178,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 } ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        for c in df.columns:
-          df[c] = pd.to_numeric(df[c], errors='ignore')
+        df = pd.DataFrame(results, columns = results.json['head']['vars']).applymap(str)
         return df.to_json(orient='records')
 
       elif self.rdf_type in ['space','property','insula','region']:
@@ -302,6 +300,26 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
           my_geojson = None
 
       return my_geojson
+    
+    def as_object(self):
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+        if identifier == None:
+            return json.dumps([])
+        
+        qt = Template("""
+        PREFIX p-lod: <urn:p-lod:id:>
+        SELECT ?subject ?predicate WHERE 
+        { ?subject ?predicate p-lod:$identifier . }""")
+                      
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        return df.to_json(orient='records')
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
@@ -426,11 +444,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.applymap(str)
-
         return df.to_json(orient='records')
-
-
-
 
    ## spatial_hierarchy_up ##
     def spatial_hierarchy_up(self):
