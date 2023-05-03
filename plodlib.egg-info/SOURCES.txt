@@ -1,0 +1,8 @@
+README.md
+setup.py
+plodlib/__init__.py
+plodlib/__main__.py
+plodlib.egg-info/PKG-INFO
+plodlib.egg-info/SOURCES.txt
+plodlib.egg-info/dependency_links.txt
+plodlib.egg-info/top_level.txt

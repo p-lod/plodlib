@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: plodlib
+Version: 0.1.2
+Summary: Library and CLI for accessing the P-LOD triplestore
+Home-page: https://github.com/p-lod/plodlib/
+Author: Sebastian Heath
+Author-email: sebastian.heath@nyu.edu
