@@ -12,7 +12,7 @@ import requests
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
 
-# Convenience functions
+
 def luna_tilde_val(luna_urn):
   if luna_urn.startswith("urn:p-lod:id:luna_img_PALP"):
     tilde_val = "14"
@@ -179,7 +179,8 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
+        for c in df.columns:
+          df[c] = pd.to_numeric(df[c], errors='ignore')
         return df.to_json(orient='records')
 
       elif self.rdf_type in ['space','property','insula','region']:
@@ -375,6 +376,8 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        for c in df.columns:
+          df[c] = pd.to_numeric(df[c], errors='ignore')
         return df.to_json(orient = 'records')
 
 
