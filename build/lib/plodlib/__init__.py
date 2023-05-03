@@ -317,7 +317,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         PREFIX p-lod: <urn:p-lod:id:>
         SELECT ?subject ?object WHERE 
         { ?subject p-lod:$identifier ?object . }
-        LIMIT 15000""")
+        ORDER BY ?subject ?object LIMIT 15000""")
                       
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
@@ -338,7 +338,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         PREFIX p-lod: <urn:p-lod:id:>
         SELECT ?subject ?predicate WHERE 
         { ?subject ?predicate p-lod:$identifier . }
-        LIMIT 15000""")
+        ORDER BY ?subject ?predicate LIMIT 15000""")
                       
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
