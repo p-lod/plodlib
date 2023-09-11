@@ -278,6 +278,8 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
       try:
         # if the there is geojson, use it
         my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
+        if isinstance(my_geojson, pd.Series):
+            my_geojson = my_geojson[0]
 
       except:
         # if no, geojson, try and find some. this may well develop over time
