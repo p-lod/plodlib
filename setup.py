@@ -8,6 +8,10 @@ setup(name='plodlib',
       author='Sebastian Heath',
       author_email='sebastian.heath@nyu.edu',
       url='https://github.com/p-lod/plodlib/',
-      packages=['plodlib']
+      packages=['plodlib'],
+      install_requires=[
+         'pandas',
+         'rdflib'
+        ]
      )
 
