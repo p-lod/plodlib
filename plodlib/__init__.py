@@ -91,7 +91,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         results = g.query(qt.substitute(identifier = identifier))
         id_df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        id_df = id_df.applymap(str)
+        id_df = id_df.map(str)
         id_df.set_index('p', inplace = True)
     
         # type and label first
@@ -178,7 +178,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 } ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars']).applymap(str)
+        df = pd.DataFrame(results, columns = results.json['head']['vars']).map(str)
         return df.to_json(orient='records')
 
       elif self.rdf_type in ['space','property','insula','region']:
@@ -468,7 +468,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
         
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
         return df.to_json(orient='records')
 
    ## spatial_hierarchy_up ##
@@ -519,7 +519,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
@@ -624,7 +624,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
@@ -655,7 +655,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
