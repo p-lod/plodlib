@@ -11,7 +11,8 @@ setup(name='plodlib',
       packages=['plodlib'],
       install_requires=[
          'pandas',
-         'rdflib'
+         'rdflib>=7.0.0',
+         'requests'
         ]
      )
 

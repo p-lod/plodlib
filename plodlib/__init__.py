@@ -71,9 +71,9 @@ def add_luna_info(row):
 # Define a class
 class PLODResource(object):
 
-    def __init__(self,identifier = None):
+    def __init__(self,identifier = 'pompeii'):
 
-        # could defaut to 'pompeii' along with its info?
+        # could default to 'pompeii' along with its info?
         if identifier == None:
           self.identifier = None
           return
@@ -91,41 +91,47 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 
         results = g.query(qt.substitute(identifier = identifier))
         id_df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        id_df = id_df.applymap(str)
+        id_df = id_df.map(str)
         id_df.set_index('p', inplace = True)
     
         # type and label first
+
         self.rdf_type = None
         try:
-        	self.rdf_type = id_df.loc['http://www.w3.org/1999/02/22-rdf-syntax-ns#type','o'].replace('urn:p-lod:id:','')
-        except:
-        	self.rdf_type = None
+          rdf_type = id_df.loc['http://www.w3.org/1999/02/22-rdf-syntax-ns#type','o']
+          if type(rdf_type) == pd.Series:
+            rdf_type = list(rdf_type.replace('urn:p-lod:id:','', regex = True))
+          else:
+            rdf_type = rdf_type.replace('urn:p-lod:id:','')
+          self.rdf_type = rdf_type
 
+        except:
+        	pass
 
         self.label = None
         try:
         	self.label = id_df.loc['http://www.w3.org/2000/01/rdf-schema#label','o']
         except:
-        	self.label = None
+        	pass
         
         
         self.broader = None
         try:
         	self.broader = id_df.loc['urn:p-lod:id:broader','o']
         except:
-        	self.broader = None
+        	pass
 
         self.p_in_p_url = None
         try:
         	self.p_in_p_url = id_df.loc['urn:p-lod:id:p-in-p-url','o']
         except:
-        	self.p_in_p_url = None
+        	pass
         
         self.wikidata_url = None
         try:
         	self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
         except:
-        	self.wikidata_url = None
+        	pass
         
         # set identifier if it exists. None otherwise. Preserve identifier as passed
         self._identifier_parameter = identifier
@@ -178,7 +184,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 } ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars']).applymap(str)
+        df = pd.DataFrame(results, columns = results.json['head']['vars']).map(str)
         return df.to_json(orient='records')
 
       elif self.rdf_type in ['space','property','insula','region']:
@@ -468,7 +474,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
         
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
         return df.to_json(orient='records')
 
    ## spatial_hierarchy_up ##
@@ -519,7 +525,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn WHERE { ?urn p-lod:spatially-within p-lod:$identifier }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
@@ -624,7 +630,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
@@ -655,7 +661,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.applymap(str)
+        df = df.map(str)
     
         return df.to_json(orient="records")
 
