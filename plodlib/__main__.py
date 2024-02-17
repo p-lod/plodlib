@@ -11,7 +11,7 @@ if __name__ == "__main__":
     r = PLODResource(args.arg_r)
 
     if args.method:
-    	method = args.method
-    	print(getattr(r, method)())
+        method = args.method
+        print(getattr(r, method)())
     else:
         print(r.label)

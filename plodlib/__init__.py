@@ -106,26 +106,26 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
           self.rdf_type = rdf_type
 
         except:
-        	pass
+           pass
 
         self.label = None
         try:
-        	self.label = id_df.loc['http://www.w3.org/2000/01/rdf-schema#label','o']
+           self.label = id_df.loc['http://www.w3.org/2000/01/rdf-schema#label','o']
         except:
-        	pass
+           pass
         
         
         self.broader = None
         try:
-        	self.broader = id_df.loc['urn:p-lod:id:broader','o']
+           self.broader = id_df.loc['urn:p-lod:id:broader','o']
         except:
-        	pass
+           pass
 
         self.p_in_p_url = None
         try:
-        	self.p_in_p_url = id_df.loc['urn:p-lod:id:p-in-p-url','o']
+           self.p_in_p_url = id_df.loc['urn:p-lod:id:p-in-p-url','o']
         except:
-        	pass
+           pass
         
         self.wikidata_url = None
         try:
@@ -145,6 +145,18 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         self._sparql_results_as_html_table = id_df.to_html()
         self._id_df = id_df
 
+        best_images = None
+        try:
+            best_images = id_df.loc['urn:p-lod:id:best-image','o']
+            if type(best_images) == pd.Series:
+              best_images = list(best_images.replace('urn:p-lod:id:','', regex = True))
+            else:
+              best_images = [best_images.replace('urn:p-lod:id:','')]
+            self.best_images = best_images
+        except:
+            pass
+        del(best_images)
+        
 
     def gather_images(self):
       # return format is urn (of image), depicts_urn, depicts_type, depicts_label, is_best_image, l_record, l_media, l_batch, l_description, geojson
