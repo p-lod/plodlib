@@ -129,16 +129,16 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         
         self.wikidata_url = None
         try:
-        	self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
+          self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
         except:
-        	pass
+          pass
         
         # set identifier if it exists. None otherwise. Preserve identifier as passed
         self._identifier_parameter = identifier
         if len(id_df.index) > 0:
-        	self.identifier = identifier
+          self.identifier = identifier
         else:
-        	self.identifier = None
+          self.identifier = None
 
         # extras
         # if with_extras:
@@ -197,7 +197,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars']).map(str)
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
       elif self.rdf_type in ['space','property','insula','region']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -241,7 +241,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
       elif self.rdf_type in ['feature']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -282,7 +282,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
       else:
         luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
         if len(luna_df):
@@ -341,7 +341,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                       
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
     def as_object(self):
         # Connect to the remote triplestore with read-only connection
@@ -362,7 +362,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                       
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
@@ -487,7 +487,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.map(str)
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
    ## spatial_hierarchy_up ##
     def spatial_hierarchy_up(self):
@@ -519,7 +519,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         
-        return df.to_json(orient='records')
+        return json.loads(df.to_json(orient='records'))
 
 
 ## spatial_children ##
