@@ -178,6 +178,28 @@ SELECT DISTINCT ?urn ?label WHERE {
         
         return json.loads(df.to_json(orient='records'))
 
+    def conceptual_descendants(self):
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False,
+                                           returnFormat = 'json')
+        g = rdf.Graph(store)
+
+        identifier = self.identifier
+
+        qt = Template("""
+PREFIX p-lod: <urn:p-lod:id:>
+SELECT DISTINCT ?urn ?label WHERE {
+       ?urn p-lod:broader+  p-lod:$identifier.
+              
+      OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+                      }""")
+        results = g.query(qt.substitute(identifier = identifier))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        df = df.map(str)
+    
+        return json.loads(df.to_json(orient="records"))
+
     def conceptual_children(self):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
