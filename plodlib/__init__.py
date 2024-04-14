@@ -10,6 +10,7 @@ import requests
 #requests_cache.install_cache('plodlib_cache')
 
 import rdflib as rdf
+# from rdflib.plugins.parsers import TurtleParser
 from rdflib.plugins.stores import sparqlstore
 
 
@@ -553,7 +554,24 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
         df = df.map(str)
         return json.loads(df.to_json(orient='records'))
 
-   ## spatial_hierarchy_up ##
+    def rdf_describe(self):
+        identifier = self.identifier
+        # Connect to the remote triplestore with read-only connection
+        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                           context_aware = False)
+        g = rdf.Graph(store)
+
+        q = f"""
+PREFIX p-lod: <urn:p-lod:id:>
+DESCRIBE p-lod:{identifier}"""
+        
+        results = g.query(q)
+        results = results.serialize(format='turtle').decode('utf-8')
+        return results
+
+
+
+   ## spatial_ancestors ##
     def spatial_ancestors(self):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
