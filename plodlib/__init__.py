@@ -569,7 +569,34 @@ DESCRIBE p-lod:{identifier}"""
         results = results.serialize(format='turtle').decode('utf-8')
         return results
 
+    def see_also(self):
+      identifier = self.identifier
+      # Connect to the remote triplestore with read-only connection
+      store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
+                                          context_aware = False)
+      
+      g = rdf.Graph(store)
 
+      qt = Template("""
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX p-lod: <urn:p-lod:id:>
+
+CONSTRUCT {
+?s rdfs:seeAlso ?o .
+?s ?sa_predicate ?o .
+
+}
+
+WHERE { BIND(p-lod:$identifier AS ?s )
+    ?s ?sa_predicate ?o .
+      ?sa_predicate owl:equivalentProperty rdfs:seeAlso .
+}
+      """)
+  
+      results = g.query(qt.substitute(identifier = identifier))
+      results = results.serialize(format='turtle').decode('utf-8')
+      return results
 
    ## spatial_ancestors ##
     def spatial_ancestors(self):
