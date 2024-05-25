@@ -6,8 +6,6 @@ from string import Template
 import json
 import pandas as pd
 import requests
-#import requests_cache
-#requests_cache.install_cache('plodlib_cache')
 
 import rdflib as rdf
 # from rdflib.plugins.parsers import TurtleParser
@@ -625,6 +623,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
   }""")
+
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         
@@ -632,7 +631,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
 
 
 ## spatial_children ##
-    def spatial_children(self):
+    def spatial_children(self, rdf_type: str = 'all', exclude_rdf_type: str = ''):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
                                            context_aware = False,
@@ -640,16 +639,25 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         g = rdf.Graph(store)
 
         identifier = self.identifier
+        if rdf_type == 'all':
+            rdf_type = ''
+        else:
+            rdf_type = f"?urn a p-lod:{rdf_type} ."
+
+        if exclude_rdf_type != '':
+            exclude_rdf_type = f"FILTER NOT EXISTS {{ ?urn a p-lod:{exclude_rdf_type} . }}"
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
       ?urn p-lod:spatially-within p-lod:$identifier .
+      $rdf_type
+      $exclude_rdf_type
       OPTIONAL { ?urn a ?type }
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
       OPTIONAL { ?urn p-lod:geojson ?geojson }
                       }""")
-        results = g.query(qt.substitute(identifier = identifier))
+        results = g.query(qt.substitute(identifier = identifier, rdf_type = rdf_type, exclude_rdf_type = exclude_rdf_type))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         df = df.map(str)
     
@@ -761,7 +769,6 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         return json.loads(df.to_json(orient="records"))
 
 
-
 ## narrower ##
     @property
     def narrower(self):
@@ -790,6 +797,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         df = df.map(str)
     
         return json.loads(df.to_json(orient="records"))
+
 
 ## images_from_luna ##
     @property
@@ -867,6 +875,8 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
+
+
 ## dunder methods
     def __str__(self):
         return self.label
