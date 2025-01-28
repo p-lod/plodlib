@@ -349,7 +349,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
       else:
         luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
         if len(luna_df):
-          return luna_df.to_json(orient = 'records')
+          return json.loads(luna_df.to_json(orient = 'records'))
         else:
           return []
       
@@ -380,7 +380,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
               my_geojson = None
               print("Failed to parse geojson")
         except:
-          return None
+          return []
         
       return my_geojson
     
@@ -394,7 +394,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         identifier = self.identifier
         if identifier == None:
-            return json.dumps([])
+            return []
         
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
@@ -415,7 +415,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         identifier = self.identifier
         if identifier == None:
-            return json.dumps([])
+            return []
         
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
@@ -441,7 +441,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         identifier = self.identifier
         if identifier == None:
-            return json.dumps([])
+            return []
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
