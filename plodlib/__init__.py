@@ -524,6 +524,9 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
     { ?component p-lod:depicts ?identifier }
     UNION
     { ?component p-lod:depicts/p-lod:broader ?identifier }
+    UNION
+    { ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:has-pompeian-wall-painting-style ?identifier }
+    
     
     ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
     ?urn a p-lod:$level_of_detail
