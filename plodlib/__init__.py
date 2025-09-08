@@ -366,20 +366,40 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
       except:
         # if no geojson, try and find some. this may well develop over time
+          
+              
         try:
-          # note that depicted_where will return an empty list so check length after calling
-          dw_d = self.depicted_where(level_of_detail='space')
-          if len(dw_d):
+          if self.rdf_type == 'pompeian-wall-painting-style':
+            as_object_list = self.as_object(add_predicate = 'geojson' , set_predicate = 'has-pompeian-wall-painting-style')
+            geojson_list = [d["added"] for d in as_object_list]
+            if len(geojson_list):
               my_geojson_d = {"type": "FeatureCollection", "features":[]}
-              for g in dw_d:
-                if g['geojson'] != 'None':
-                  f = json.loads(g['geojson'])
+              for g in geojson_list:
+                try:
+                  f = json.loads(g)
                   my_geojson_d['features'].append(f)
-              my_geojson = my_geojson_d # json.dumps(my_geojson_d)
+                except:
+                   print(f"Couldn't parse {g}")
+              my_geojson = my_geojson_d
+            else:
+                my_geojson = None
+                print("Failed to parse geojson")
+
+          # note that depicted_where will return an empty list so check length after calling
           else:
-              my_geojson = None
-              print("Failed to parse geojson")
+            dw_d = self.depicted_where(level_of_detail='space')
+            if len(dw_d):
+                my_geojson_d = {"type": "FeatureCollection", "features":[]}
+                for g in dw_d:
+                  if g['geojson'] != 'None':
+                    f = json.loads(g['geojson'])
+                    my_geojson_d['features'].append(f)
+                my_geojson = my_geojson_d # json.dumps(my_geojson_d)
+            else:
+                my_geojson = None
+                print("Failed to parse geojson")
         except:
+          print("Error afer no geojson found.")
           return []
         
       return my_geojson
@@ -406,7 +426,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         return json.loads(df.to_json(orient='records'))
 
-    def as_object(self):
+    def as_object(self, set_predicate = None , broader = False, add_predicate = None, ):
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
                                            context_aware = False,
@@ -417,13 +437,44 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         if identifier == None:
             return []
         
+        set_predicate_str = '?predicate'
+        if set_predicate:
+           set_predicate_str = f'p-lod:{set_predicate}'
+
+        broader_str = ''
+        if broader:
+           broader_str = f'UNION {{ ?subject }}'
+
+        add_predicate_str = ''
+        if add_predicate:
+           add_predicate_str = f"OPTIONAL {{?subject p-lod:{add_predicate} ?added}}"
+
+
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
-        SELECT ?subject ?predicate WHERE 
-        { ?subject ?predicate p-lod:$identifier . }
-        ORDER BY ?subject ?predicate LIMIT 15000""")
+        SELECT ?subject ?predicate ?added WHERE 
+        {
+          {
+          ?subject $set_predicate_str p-lod:$identifier .
+          }
+          UNION
+          {
+          ?subject $set_predicate_str ?broader_start .
+          ?broader_start p-lod:broader+ p-lod:$identifier .
+          }
                       
-        results = g.query(qt.substitute(identifier = identifier))
+          $add_predicate_str 
+
+          }
+        ORDER BY ?subject ?predicate LIMIT 15000""")
+
+        
+        query_str = qt.substitute(identifier = identifier, set_predicate_str = set_predicate_str , add_predicate_str = add_predicate_str)
+
+        print(query_str)
+
+        results = g.query(query_str)
+
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         return json.loads(df.to_json(orient='records'))
 
