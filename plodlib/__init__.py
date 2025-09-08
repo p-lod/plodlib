@@ -426,7 +426,10 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         return json.loads(df.to_json(orient='records'))
 
-    def as_object(self, set_predicate = None , broader = False, add_predicate = None, ):
+    def as_object(self, set_predicate = None ,
+                  add_predicate = None,
+                  broader = False ):
+        
         # Connect to the remote triplestore with read-only connection
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
                                            context_aware = False,
@@ -441,14 +444,19 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         if set_predicate:
            set_predicate_str = f'p-lod:{set_predicate}'
 
-        broader_str = ''
-        if broader:
-           broader_str = f'UNION {{ ?subject }}'
-
         add_predicate_str = ''
         if add_predicate:
            add_predicate_str = f"OPTIONAL {{?subject p-lod:{add_predicate} ?added}}"
 
+        broader_union_str = ''
+        if broader:
+          broader_union_str = f"""
+          UNION
+          {{
+          ?subject {set_predicate_str} ?broader_start .
+          ?broader_start p-lod:broader+ p-lod:{identifier} .
+          }}
+           """
 
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
@@ -457,11 +465,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
           {
           ?subject $set_predicate_str p-lod:$identifier .
           }
-          UNION
-          {
-          ?subject $set_predicate_str ?broader_start .
-          ?broader_start p-lod:broader+ p-lod:$identifier .
-          }
+          $broader_union_str
                       
           $add_predicate_str 
 
@@ -469,7 +473,10 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         ORDER BY ?subject ?predicate LIMIT 15000""")
 
         
-        query_str = qt.substitute(identifier = identifier, set_predicate_str = set_predicate_str , add_predicate_str = add_predicate_str)
+        query_str = qt.substitute(identifier = identifier,
+                                  broader_union_str = broader_union_str,
+                                  set_predicate_str = set_predicate_str ,
+                                  add_predicate_str = add_predicate_str )
 
         print(query_str)
 
