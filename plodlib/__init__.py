@@ -385,6 +385,23 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                 my_geojson = None
                 print("Failed to parse geojson")
 
+          elif self.rdf_type == 'space-characterization':
+            as_object_list = self.as_object(add_predicate = 'geojson' , set_predicate = 'has-space-characterization')
+            geojson_list = [d["added"] for d in as_object_list]
+            if len(geojson_list):
+              my_geojson_d = {"type": "FeatureCollection", "features":[]}
+              for g in geojson_list:
+                try:
+                  f = json.loads(g)
+                  my_geojson_d['features'].append(f)
+                except:
+                   print(f"Couldn't parse {g}")
+              my_geojson = my_geojson_d
+            else:
+                my_geojson = None
+                print("Failed to parse geojson")
+
+
           # note that depicted_where will return an empty list so check length after calling
           else:
             dw_d = self.depicted_where(level_of_detail='space')
@@ -483,6 +500,8 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         results = g.query(query_str)
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        if add_predicate == None:
+           df = df.drop('added', axis=1)
         return json.loads(df.to_json(orient='records'))
 
     ## get_predicate_values ##
