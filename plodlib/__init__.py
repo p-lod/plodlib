@@ -934,13 +934,13 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
                           "right_urn": f"urn:p-lod:id:{right_depicts_r.identifier}"}
 
     def compare_depicted(self, right, level_of_detail = 'space'):
-      left_depicted_json = json.loads(self.depicted_where(level_of_detail))
+      left_depicted = self.depicted_where(level_of_detail)
 
       right_depicted_r = PLODResource(right)
-      right_depicted_json = json.loads(right_depicted_r.depicted_where(level_of_detail))
+      right_depicted = right_depicted_r.depicted_where(level_of_detail)
 
-      left_depicted_df = pd.DataFrame(left_depicted_json)
-      right_depicted_df = pd.DataFrame(right_depicted_json)
+      left_depicted_df = pd.DataFrame(left_depicted)
+      right_depicted_df = pd.DataFrame(right_depicted)
 
       difference_left = set(left_depicted_df['urn']).difference(set(right_depicted_df['urn']))
       intersection = set(left_depicted_df['urn']).intersection(set(right_depicted_df['urn']))
