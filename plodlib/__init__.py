@@ -67,6 +67,28 @@ def add_luna_info(row):
   return row
 
 
+def _coerce_term(v):
+    # rdflib URIRef/BNode -> str, Literal -> its xsd-typed Python value,
+    # pandas NaN/None -> None. Leaves already-plain Python values untouched.
+    if v is None:
+        return None
+    if isinstance(v, rdf.term.Literal):
+        try:
+            return v.toPython()
+        except Exception:
+            return str(v)
+    if isinstance(v, (rdf.term.URIRef, rdf.term.BNode)):
+        return str(v)
+    if isinstance(v, float) and v != v:
+        return None
+    return v
+
+
+def _records(df):
+    return [{k: _coerce_term(v) for k, v in row.items()}
+            for row in df.to_dict(orient='records')]
+
+
 # Define a class
 class PLODResource(object):
 
@@ -175,7 +197,7 @@ SELECT DISTINCT ?urn ?label WHERE {
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
     def conceptual_descendants(self):
         # Connect to the remote triplestore with read-only connection
@@ -195,9 +217,7 @@ SELECT DISTINCT ?urn ?label WHERE {
                       }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-    
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
     def conceptual_children(self):
         # Connect to the remote triplestore with read-only connection
@@ -216,9 +236,7 @@ SELECT DISTINCT ?urn ?label WHERE {
                       }""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-    
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
     
     def gather_images(self):
@@ -259,8 +277,8 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 } ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars']).map(str)
-        return json.loads(df.to_json(orient='records'))
+        df = pd.DataFrame(results, columns = results.json['head']['vars'])
+        return _records(df)
 
       elif self.rdf_type in ['space','property','insula','region']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -304,7 +322,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
       elif self.rdf_type in ['feature']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -345,11 +363,11 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
       else:
-        luna_df =  pd.DataFrame(json.loads(self.images_from_luna))
+        luna_df =  pd.DataFrame(self.images_from_luna)
         if len(luna_df):
-          return json.loads(luna_df.to_json(orient = 'records'))
+          return _records(luna_df)
         else:
           return []
       
@@ -441,7 +459,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                       
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
     def as_object(self, set_predicate = None ,
                   add_predicate = None,
@@ -502,7 +520,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         if add_predicate == None:
            df = df.drop('added', axis=1)
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
@@ -527,7 +545,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return json.loads(df['values'].to_json(orient = 'records'))
+        return [_coerce_term(v) for v in df['values']]
 
 
     ## depicts_concepts ##
@@ -577,9 +595,7 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        for c in df.columns:
-          df[c] = pd.to_numeric(df[c], errors='ignore')
-        return json.loads(df.to_json(orient = 'records'))
+        return _records(df)
 
 
     ## depicted_where ##
@@ -628,8 +644,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
         
 
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
     def rdf_describe(self):
         identifier = self.identifier
@@ -706,7 +721,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
         
-        return json.loads(df.to_json(orient='records'))
+        return _records(df)
 
 
 ## spatial_children ##
@@ -738,9 +753,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
                       }""")
         results = g.query(qt.substitute(identifier = identifier, rdf_type = rdf_type, exclude_rdf_type = exclude_rdf_type))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-    
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
 ## spatially_within
     @property
@@ -766,7 +779,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
       } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
      
 
 ## in_region ##
@@ -795,7 +808,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
 
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
 
 ## instances_of ##
@@ -825,7 +838,7 @@ SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
     
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
 
 ## used_as_predicate_by ##
@@ -843,9 +856,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-    
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
 
 ## narrower ##
@@ -873,9 +884,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        df = df.map(str)
-    
-        return json.loads(df.to_json(orient="records"))
+        return _records(df)
 
 
 ## images_from_luna ##
@@ -910,47 +919,31 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         results = g.query(qt.substitute(identifier = identifier))
         df = pd.DataFrame(results, columns = results.json['head']['vars'])
 
-        return json.loads(df.apply(add_luna_info, axis = 1).to_json(orient='records'))
+        return _records(df.apply(add_luna_info, axis=1))
 
-    def compare_depicts(self,right):
-      left_depicts_json = json.loads(self.depicts_concepts())
+    def compare_depicts(self, right):
+      right_r = PLODResource(right)
 
-      right_depicts_r = PLODResource(right)
-      right_depicts_json = json.loads(right_depicts_r.depicts_concepts())
+      left_urns = {r['urn'] for r in self.depicts_concepts() if 'urn' in r}
+      right_urns = {r['urn'] for r in right_r.depicts_concepts() if 'urn' in r}
 
-      left_depicts_df = pd.DataFrame(left_depicts_json)
-      right_depicts_df = pd.DataFrame(right_depicts_json)
+      return {"left_urn": f"urn:p-lod:id:{self.identifier}",
+              "difference_left": list(left_urns - right_urns),
+              "intersection": list(left_urns & right_urns),
+              "difference_right": list(right_urns - left_urns),
+              "right_urn": f"urn:p-lod:id:{right_r.identifier}"}
 
-      
-      difference_left = set(left_depicts_df['urn']).difference(set(right_depicts_df['urn']))
-      intersection = set(left_depicts_df['urn']).intersection(set(right_depicts_df['urn']))
-      difference_right = set(right_depicts_df['urn']).difference(set(left_depicts_df['urn']))
+    def compare_depicted(self, right, level_of_detail='space'):
+      right_r = PLODResource(right)
 
+      left_urns = {r['urn'] for r in self.depicted_where(level_of_detail) if 'urn' in r}
+      right_urns = {r['urn'] for r in right_r.depicted_where(level_of_detail) if 'urn' in r}
 
-      return { "left_urn": f"urn:p-lod:id:{self.identifier}",
-                           "difference_left": list(difference_left),
-                          "intersection": list(intersection),
-                          "difference_right": list(difference_right),
-                          "right_urn": f"urn:p-lod:id:{right_depicts_r.identifier}"}
-
-    def compare_depicted(self, right, level_of_detail = 'space'):
-      left_depicted = self.depicted_where(level_of_detail)
-
-      right_depicted_r = PLODResource(right)
-      right_depicted = right_depicted_r.depicted_where(level_of_detail)
-
-      left_depicted_df = pd.DataFrame(left_depicted)
-      right_depicted_df = pd.DataFrame(right_depicted)
-
-      difference_left = set(left_depicted_df['urn']).difference(set(right_depicted_df['urn']))
-      intersection = set(left_depicted_df['urn']).intersection(set(right_depicted_df['urn']))
-      difference_right = set(right_depicted_df['urn']).difference(set(left_depicted_df['urn']))
-
-      return { "left_urn": f"urn:p-lod:id:{self.identifier}",
-                          "difference_left": list(difference_left),
-                          "intersection": list(intersection),
-                          "difference_right": list(difference_right),
-                          "right_urn": f"urn:p-lod:id:{right_depicted_r.identifier}"}
+      return {"left_urn": f"urn:p-lod:id:{self.identifier}",
+              "difference_left": list(left_urns - right_urns),
+              "intersection": list(left_urns & right_urns),
+              "difference_right": list(right_urns - left_urns),
+              "right_urn": f"urn:p-lod:id:{right_r.identifier}"}
 
     # http://umassamherst.lunaimaging.com/luna/servlet/as/search?lc=umass%7E14%7E14&q=PALP_11258
     # j['results'][0]['urlSize4']
