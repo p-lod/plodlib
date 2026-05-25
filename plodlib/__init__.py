@@ -84,9 +84,16 @@ def _coerce_term(v):
     return v
 
 
-def _records(df):
-    return [{k: _coerce_term(v) for k, v in row.items()}
-            for row in df.to_dict(orient='records')]
+def _records(result):
+    # Accept either a rdflib SPARQL Result (preferred) or a pandas DataFrame
+    # (only used by the two sites that genuinely need pandas: __init__'s id_df
+    # and images_from_luna's df.apply).
+    if isinstance(result, pd.DataFrame):
+        return [{k: _coerce_term(v) for k, v in row.items()}
+                for row in result.to_dict(orient='records')]
+    cols = [str(v) for v in result.vars]
+    return [{c: _coerce_term(row[i]) for i, c in enumerate(cols)}
+            for row in result]
 
 
 # Define a class
@@ -194,10 +201,7 @@ SELECT DISTINCT ?urn ?label WHERE {
     ?urn a p-lod:concept  .
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }""")
-        results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        
-        return _records(df)
+        return _records(g.query(qt.substitute(identifier = identifier)))
 
     def conceptual_descendants(self):
         # Connect to the remote triplestore with read-only connection
@@ -216,8 +220,7 @@ SELECT DISTINCT ?urn ?label WHERE {
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
     def conceptual_children(self):
         # Connect to the remote triplestore with read-only connection
@@ -235,8 +238,7 @@ SELECT DISTINCT ?urn ?label WHERE {
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
     
     def gather_images(self):
@@ -277,8 +279,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 } ORDER BY DESC(?best_image)""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
       elif self.rdf_type in ['space','property','insula','region']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -321,8 +322,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 }""")
         
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
       elif self.rdf_type in ['feature']:
         store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
@@ -360,16 +360,9 @@ UNION
 OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 }""")
         
-        results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        #return df.apply(add_luna_info, axis = 1).to_json(orient='records')
-        return _records(df)
+        return _records(g.query(qt.substitute(identifier = identifier)))
       else:
-        luna_df =  pd.DataFrame(self.images_from_luna)
-        if len(luna_df):
-          return _records(luna_df)
-        else:
-          return []
+        return self.images_from_luna or []
       
 
     @property
@@ -458,8 +451,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         ORDER BY ?subject ?object LIMIT 15000""")
                       
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
     def as_object(self, set_predicate = None ,
                   add_predicate = None,
@@ -517,10 +509,11 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         results = g.query(query_str)
 
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        if add_predicate == None:
-           df = df.drop('added', axis=1)
-        return _records(df)
+        records = _records(results)
+        if add_predicate is None:
+            for r in records:
+                r.pop('added', None)
+        return records
 
     ## get_predicate_values ##
     def get_predicate_values(self,predicate = 'urn:p-lod:id:label'):
@@ -544,8 +537,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
 """)
 
         results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return [_coerce_term(v) for v in df['values']]
+        return [_coerce_term(row[0]) for row in results]
 
 
     ## depicts_concepts ##
@@ -594,8 +586,7 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 } GROUP BY ?urn ?label ORDER BY ?urn""")
 
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
 
     ## depicted_where ##
@@ -643,8 +634,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
 
         
 
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
     def rdf_describe(self):
         identifier = self.identifier
@@ -718,10 +708,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
     }
   }""")
 
-        results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        
-        return _records(df)
+        return _records(g.query(qt.substitute(identifier = identifier)))
 
 
 ## spatial_children ##
@@ -752,8 +739,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
       OPTIONAL { ?urn p-lod:geojson ?geojson }
                       }""")
         results = g.query(qt.substitute(identifier = identifier, rdf_type = rdf_type, exclude_rdf_type = exclude_rdf_type))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
 ## spatially_within
     @property
@@ -778,8 +764,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         
       } LIMIT 1""")
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
      
 
 ## in_region ##
@@ -805,10 +790,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         ?urn p-lod:geojson ?geojson .
         
       } LIMIT 1""")
-        results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-
-        return _records(df)
+        return _records(g.query(qt.substitute(identifier = identifier)))
 
 
 ## instances_of ##
@@ -835,10 +817,7 @@ SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
     OPTIONAL { ?component p-lod:depicts ?urn ;
                a p-lod:artwork-component . }
  } GROUP BY ?urn ?type ?label ?geojson ORDER BY ?urn""")
-        results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-    
-        return _records(df)
+        return _records(g.query(qt.substitute(identifier = identifier)))
 
 
 ## used_as_predicate_by ##
@@ -855,8 +834,7 @@ SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
 
 ## narrower ##
@@ -883,8 +861,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
 """)
         
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        return _records(df)
+        return _records(results)
 
 
 ## images_from_luna ##
