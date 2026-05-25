@@ -184,6 +184,11 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
             except (ValueError, TypeError):
                 pass
 
+        # Keep the raw predicate -> [object, ...] mapping accessible for
+        # callers that need a full dump of the resource (e.g. p-lod-api's
+        # /id/{id} endpoint).
+        self._predicates = predicates
+
     def conceptual_ancestors(self):
         g = self._graph()
 
