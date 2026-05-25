@@ -4,12 +4,38 @@
 from string import Template
 
 import json
-import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
 
 import rdflib as rdf
-# from rdflib.plugins.parsers import TurtleParser
 from rdflib.plugins.stores import sparqlstore
+
+
+_ENDPOINT = "http://52.170.134.25:3030/plod_endpoint/query"
+_CONNECT_TIMEOUT_SECONDS = 10   # generous for slow / international networks
+_READ_TIMEOUT_SECONDS = 120     # heavy SPARQL queries can take a while
+
+
+class _TimeoutAdapter(HTTPAdapter):
+    # requests.Session has no default-timeout knob; without this, a hung
+    # triplestore would block the calling worker indefinitely. Per-request
+    # timeouts passed to .get/.post still win (setdefault leaves them alone).
+    def __init__(self, *args,
+                 timeout=(_CONNECT_TIMEOUT_SECONDS, _READ_TIMEOUT_SECONDS),
+                 **kwargs):
+        self._timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        kwargs.setdefault('timeout', self._timeout)
+        return super().send(request, **kwargs)
+
+
+# One Session per process (gunicorn worker). Pools HTTP keep-alive
+# connections so subsequent SPARQL queries skip the TCP handshake.
+_SESSION = requests.Session()
+_SESSION.mount('http://', _TimeoutAdapter())
+_SESSION.mount('https://', _TimeoutAdapter())
 
 
 def luna_tilde_val(luna_urn):
@@ -69,7 +95,7 @@ def add_luna_info(row):
 
 def _coerce_term(v):
     # rdflib URIRef/BNode -> str, Literal -> its xsd-typed Python value,
-    # pandas NaN/None -> None. Leaves already-plain Python values untouched.
+    # None or NaN -> None. Leaves already-plain Python values untouched.
     if v is None:
         return None
     if isinstance(v, rdf.term.Literal):
@@ -85,12 +111,7 @@ def _coerce_term(v):
 
 
 def _records(result):
-    # Accept either a rdflib SPARQL Result (preferred) or a pandas DataFrame
-    # (only used by the two sites that genuinely need pandas: __init__'s id_df
-    # and images_from_luna's df.apply).
-    if isinstance(result, pd.DataFrame):
-        return [{k: _coerce_term(v) for k, v in row.items()}
-                for row in result.to_dict(orient='records')]
+    # Convert a rdflib SPARQL Result to a list of plain-Python dicts.
     cols = [str(v) for v in result.vars]
     return [{c: _coerce_term(row[i]) for i, c in enumerate(cols)}
             for row in result]
@@ -99,6 +120,19 @@ def _records(result):
 # Define a class
 class PLODResource(object):
 
+    @staticmethod
+    def _graph(return_format='json'):
+        # return_format=None lets the store use its default (xml/turtle), which
+        # is what DESCRIBE / CONSTRUCT queries (rdf_describe, see_also) want.
+        kwargs = {
+            'query_endpoint': _ENDPOINT,
+            'context_aware': False,
+            'session': _SESSION,
+        }
+        if return_format is not None:
+            kwargs['returnFormat'] = return_format
+        return rdf.Graph(sparqlstore.SPARQLStore(**kwargs))
+
     def __init__(self,identifier = 'pompeii'):
 
         # could default to 'pompeii' along with its info?
@@ -106,11 +140,7 @@ class PLODResource(object):
           self.identifier = None
           return
 
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
         
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
@@ -118,79 +148,44 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 """)
 
         results = g.query(qt.substitute(identifier = identifier))
-        id_df = pd.DataFrame(results, columns = results.json['head']['vars'])
-        id_df = id_df.map(str)
-        id_df.set_index('p', inplace = True)
-    
-        # type and label first
 
-        self.rdf_type = None
-        try:
-          rdf_type = id_df.loc['http://www.w3.org/1999/02/22-rdf-syntax-ns#type','o']
-          if type(rdf_type) == pd.Series:
-            rdf_type = list(rdf_type.replace('urn:p-lod:id:','', regex = True))
-          else:
-            rdf_type = rdf_type.replace('urn:p-lod:id:','')
-          self.rdf_type = rdf_type
+        # Bucket (predicate, object) pairs into a dict keyed by predicate URI.
+        predicates = {}
+        for p, o in results:
+            predicates.setdefault(str(p), []).append(str(o))
 
-        except:
-           pass
-
-        self.label = None
-        try:
-           self.label = id_df.loc['http://www.w3.org/2000/01/rdf-schema#label','o']
-        except:
-           pass
-        
-        
-        self.broader = None
-        try:
-           self.broader = id_df.loc['urn:p-lod:id:broader','o']
-        except:
-           pass
-
-        self.p_in_p_url = None
-        try:
-           self.p_in_p_url = id_df.loc['urn:p-lod:id:p-in-p-url','o']
-        except:
-           pass
-        
-        self.wikidata_url = None
-        try:
-          self.wikidata_url = id_df.loc['urn:p-lod:id:wikidata-url','o']
-        except:
-          pass
-        
-        # set identifier if it exists. None otherwise. Preserve identifier as passed
         self._identifier_parameter = identifier
-        if len(id_df.index) > 0:
-          self.identifier = identifier
-        else:
-          self.identifier = None
+        self.identifier = identifier if predicates else None
 
-        # extras
-        # if with_extras:
-        self._sparql_results_as_html_table = id_df.to_html()
-        self._id_df = id_df
+        def _strip(s): return s.replace('urn:p-lod:id:', '')
+        def _first(uri): return (predicates.get(uri) or [None])[0]
 
-        best_images = None
-        try:
-            best_images = id_df.loc['urn:p-lod:id:best-image','o']
-            if type(best_images) == pd.Series:
-              best_images = list(best_images.replace('urn:p-lod:id:','', regex = True))
-            else:
-              best_images = [best_images.replace('urn:p-lod:id:','')]
-            self.best_images = best_images
-        except:
-            pass
-        del(best_images)
-        
+        # rdf_type preserves the legacy quirk: scalar if one match, list if many, None if absent.
+        rdf_types = [_strip(v) for v in predicates.get('http://www.w3.org/1999/02/22-rdf-syntax-ns#type', [])]
+        self.rdf_type = rdf_types[0] if len(rdf_types) == 1 else (rdf_types or None)
+
+        self.label        = _first('http://www.w3.org/2000/01/rdf-schema#label')
+        self.broader      = _first('urn:p-lod:id:broader')
+        self.p_in_p_url   = _first('urn:p-lod:id:p-in-p-url')
+        self.wikidata_url = _first('urn:p-lod:id:wikidata-url')
+
+        # best_images is only set when the predicate exists (callers may rely on AttributeError).
+        best = predicates.get('urn:p-lod:id:best-image')
+        if best is not None:
+            self.best_images = [_strip(v) for v in best]
+
+        # Eager-parse geojson if the resource has the predicate; otherwise the property
+        # falls through to compute a virtual geojson on access.
+        self._eager_geojson = None
+        geo_vals = predicates.get('urn:p-lod:id:geojson')
+        if geo_vals:
+            try:
+                self._eager_geojson = json.loads(geo_vals[0])
+            except (ValueError, TypeError):
+                pass
+
     def conceptual_ancestors(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -204,11 +199,7 @@ SELECT DISTINCT ?urn ?label WHERE {
         return _records(g.query(qt.substitute(identifier = identifier)))
 
     def conceptual_descendants(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -223,11 +214,7 @@ SELECT DISTINCT ?urn ?label WHERE {
         return _records(results)
 
     def conceptual_children(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -244,10 +231,7 @@ SELECT DISTINCT ?urn ?label WHERE {
     def gather_images(self):
       # return format is urn (of image), depicts_urn, depicts_type, depicts_label, is_best_image, l_record, l_media, l_batch, l_description, geojson
       if self.rdf_type == 'concept':
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -282,10 +266,7 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
         return _records(results)
 
       elif self.rdf_type in ['space','property','insula','region']:
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -325,10 +306,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         return _records(results)
 
       elif self.rdf_type in ['feature']:
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -367,78 +345,62 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
     @property
     def geojson(self):
+      if self._eager_geojson is not None:
+        return self._eager_geojson
+
+      # No direct geojson predicate (or it was malformed) — build a virtual one.
       try:
-        # if the there is geojson, use it
-        my_geojson = self._id_df.loc['urn:p-lod:id:geojson','o']
-        if isinstance(my_geojson, pd.Series):
-            my_geojson = json.loads(my_geojson[0])
-        else:
-            my_geojson = json.loads(my_geojson)
-
-      except:
-        # if no geojson, try and find some. this may well develop over time
-          
-              
-        try:
-          if self.rdf_type == 'pompeian-wall-painting-style':
-            as_object_list = self.as_object(add_predicate = 'geojson' , set_predicate = 'has-pompeian-wall-painting-style')
-            geojson_list = [d["added"] for d in as_object_list]
-            if len(geojson_list):
-              my_geojson_d = {"type": "FeatureCollection", "features":[]}
-              for g in geojson_list:
-                try:
-                  f = json.loads(g)
-                  my_geojson_d['features'].append(f)
-                except:
-                   print(f"Couldn't parse {g}")
-              my_geojson = my_geojson_d
-            else:
-                my_geojson = None
-                print("Failed to parse geojson")
-
-          elif self.rdf_type == 'space-characterization':
-            as_object_list = self.as_object(add_predicate = 'geojson' , set_predicate = 'has-space-characterization')
-            geojson_list = [d["added"] for d in as_object_list]
-            if len(geojson_list):
-              my_geojson_d = {"type": "FeatureCollection", "features":[]}
-              for g in geojson_list:
-                try:
-                  f = json.loads(g)
-                  my_geojson_d['features'].append(f)
-                except:
-                   print(f"Couldn't parse {g}")
-              my_geojson = my_geojson_d
-            else:
-                my_geojson = None
-                print("Failed to parse geojson")
-
-
-          # note that depicted_where will return an empty list so check length after calling
+        if self.rdf_type == 'pompeian-wall-painting-style':
+          as_object_list = self.as_object(add_predicate='geojson', set_predicate='has-pompeian-wall-painting-style')
+          geojson_list = [d["added"] for d in as_object_list]
+          if len(geojson_list):
+            my_geojson_d = {"type": "FeatureCollection", "features": []}
+            for g in geojson_list:
+              try:
+                my_geojson_d['features'].append(json.loads(g))
+              except:
+                print(f"Couldn't parse {g}")
+            my_geojson = my_geojson_d
           else:
-            dw_d = self.depicted_where(level_of_detail='space')
-            if len(dw_d):
-                my_geojson_d = {"type": "FeatureCollection", "features":[]}
-                for g in dw_d:
-                  if g['geojson'] != 'None':
-                    f = json.loads(g['geojson'])
-                    my_geojson_d['features'].append(f)
-                my_geojson = my_geojson_d # json.dumps(my_geojson_d)
-            else:
-                my_geojson = None
-                print("Failed to parse geojson")
-        except:
-          print("Error afer no geojson found.")
-          return []
-        
+            my_geojson = None
+            print("Failed to parse geojson")
+
+        elif self.rdf_type == 'space-characterization':
+          as_object_list = self.as_object(add_predicate='geojson', set_predicate='has-space-characterization')
+          geojson_list = [d["added"] for d in as_object_list]
+          if len(geojson_list):
+            my_geojson_d = {"type": "FeatureCollection", "features": []}
+            for g in geojson_list:
+              try:
+                my_geojson_d['features'].append(json.loads(g))
+              except:
+                print(f"Couldn't parse {g}")
+            my_geojson = my_geojson_d
+          else:
+            my_geojson = None
+            print("Failed to parse geojson")
+
+        # note that depicted_where will return an empty list so check length after calling
+        else:
+          dw_d = self.depicted_where(level_of_detail='space')
+          if len(dw_d):
+            my_geojson_d = {"type": "FeatureCollection", "features": []}
+            for g in dw_d:
+              if g['geojson'] != 'None':
+                my_geojson_d['features'].append(json.loads(g['geojson']))
+            my_geojson = my_geojson_d
+          else:
+            my_geojson = None
+            print("Failed to parse geojson")
+      except:
+        print("Error after no geojson found.")
+        return []
+
       return my_geojson
     
 
     def as_predicate(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -457,11 +419,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                   add_predicate = None,
                   broader = False ):
         
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -521,11 +479,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         # returns json array of keyed dictionaries.
 
 
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -542,11 +496,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
 
     ## depicts_concepts ##
     def depicts_concepts(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -591,11 +541,7 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separato
 
     ## depicted_where ##
     def depicted_where(self, level_of_detail = 'feature'):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -638,10 +584,7 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
 
     def rdf_describe(self):
         identifier = self.identifier
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False)
-        g = rdf.Graph(store)
+        g = self._graph(return_format=None)
 
         q = f"""
 PREFIX p-lod: <urn:p-lod:id:>
@@ -653,11 +596,7 @@ DESCRIBE p-lod:{identifier}"""
 
     def see_also(self):
       identifier = self.identifier
-      # Connect to the remote triplestore with read-only connection
-      store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                          context_aware = False)
-      
-      g = rdf.Graph(store)
+      g = self._graph(return_format=None)
 
       qt = Template("""
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -682,11 +621,7 @@ WHERE { BIND(p-lod:$identifier AS ?s )
 
    ## spatial_ancestors ##
     def spatial_ancestors(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -713,11 +648,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
 
 ## spatial_children ##
     def spatial_children(self, rdf_type: str = 'all', exclude_rdf_type: str = ''):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
         if rdf_type == 'all':
@@ -744,11 +675,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
 ## spatially_within
     @property
     def spatially_within(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -770,11 +697,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
 ## in_region ##
     @property
     def in_region(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -795,11 +718,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
 
 ## instances_of ##
     def instances_of(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -822,11 +741,7 @@ SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
 
 ## used_as_predicate_by ##
     def used_as_predicate_by(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -840,11 +755,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 ## narrower ##
     @property
     def narrower(self):
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -868,11 +779,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
     @property
     def images_from_luna(self):
 
-        # Connect to the remote triplestore with read-only connection
-        store = rdf.plugins.stores.sparqlstore.SPARQLStore(query_endpoint = "http://52.170.134.25:3030/plod_endpoint/query",
-                                           context_aware = False,
-                                           returnFormat = 'json')
-        g = rdf.Graph(store)
+        g = self._graph()
 
         identifier = self.identifier
 
@@ -894,9 +801,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         ?urn p-lod:x-luna-description ?l_description .
          }""")
         results = g.query(qt.substitute(identifier = identifier))
-        df = pd.DataFrame(results, columns = results.json['head']['vars'])
-
-        return _records(df.apply(add_luna_info, axis=1))
+        return [add_luna_info(r) for r in _records(results)]
 
     def compare_depicts(self, right):
       right_r = PLODResource(right)
