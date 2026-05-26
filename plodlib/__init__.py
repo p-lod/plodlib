@@ -771,8 +771,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
     ?urn p-lod:broader+ p-lod:$identifier .
     ?urn rdfs:label ?label .
 
-     OPTIONAL { ?anything p-lod:depicts ?urn }
-  BIND ( IF(BOUND(?anything), "true", "false") AS ?is_depicted )
+    BIND ( IF(EXISTS { ?x p-lod:depicts ?urn }, "true", "false") AS ?is_depicted )
   } ORDER BY ?label
 
 """)
