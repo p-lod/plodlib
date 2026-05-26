@@ -7,6 +7,7 @@ import json
 import requests
 from requests.adapters import HTTPAdapter
 
+import diskcache
 import rdflib as rdf
 from rdflib.plugins.stores import sparqlstore
 
@@ -118,21 +119,78 @@ def _records(result):
             for row in result]
 
 
+def _graph(return_format='json'):
+    # return_format=None lets the store use its default (xml/turtle), which
+    # is what DESCRIBE / CONSTRUCT queries (rdf_describe, see_also) want.
+    kwargs = {
+        'query_endpoint': _ENDPOINT,
+        'context_aware': False,
+        'session': _SESSION,
+    }
+    if return_format is not None:
+        kwargs['returnFormat'] = return_format
+    return rdf.Graph(sparqlstore.SPARQLStore(**kwargs))
+
+
+# Optional on-disk SPARQL result cache. Off until enable_cache() is called.
+_CACHE = None
+_CACHE_TTL_SEC = 30 * 60   # default; overridden by enable_cache()
+
+
+def enable_cache(directory='./cache', size_mb=100, ttl_sec=30 * 60):
+    """Enable on-disk SPARQL result caching for this process.
+
+    Call once at startup (e.g. from a FastAPI lifespan handler or top-of-main).
+    Subsequent calls reconfigure: the existing cache is closed and replaced.
+
+    directory: where to put the SQLite cache files (created if missing).
+    size_mb:   hard upper bound; diskcache evicts LRU when exceeded.
+    ttl_sec:   per-entry TTL. Defaults to 30 minutes.
+    """
+    global _CACHE, _CACHE_TTL_SEC
+    if _CACHE is not None:
+        _CACHE.close()
+    _CACHE = diskcache.Cache(directory, size_limit=size_mb * 1024 * 1024)
+    _CACHE_TTL_SEC = ttl_sec
+
+
+def disable_cache():
+    """Turn caching off and release the cache files."""
+    global _CACHE
+    if _CACHE is not None:
+        _CACHE.close()
+        _CACHE = None
+
+
+def _cached_select(query_string):
+    if _CACHE is None:
+        return _records(_graph().query(query_string))
+    key = ('select', query_string)
+    hit = _CACHE.get(key)
+    if hit is not None:
+        return hit
+    records = _records(_graph().query(query_string))
+    _CACHE.set(key, records, expire=_CACHE_TTL_SEC)
+    return records
+
+
+def _cached_describe(query_string, return_format='turtle'):
+    if _CACHE is None:
+        result = _graph(return_format=None).query(query_string).serialize(format=return_format)
+        return result.decode('utf-8') if isinstance(result, bytes) else result
+    key = ('describe', return_format, query_string)
+    hit = _CACHE.get(key)
+    if hit is not None:
+        return hit
+    result = _graph(return_format=None).query(query_string).serialize(format=return_format)
+    if isinstance(result, bytes):
+        result = result.decode('utf-8')
+    _CACHE.set(key, result, expire=_CACHE_TTL_SEC)
+    return result
+
+
 # Define a class
 class PLODResource(object):
-
-    @staticmethod
-    def _graph(return_format='json'):
-        # return_format=None lets the store use its default (xml/turtle), which
-        # is what DESCRIBE / CONSTRUCT queries (rdf_describe, see_also) want.
-        kwargs = {
-            'query_endpoint': _ENDPOINT,
-            'context_aware': False,
-            'session': _SESSION,
-        }
-        if return_format is not None:
-            kwargs['returnFormat'] = return_format
-        return rdf.Graph(sparqlstore.SPARQLStore(**kwargs))
 
     def __init__(self,identifier = 'pompeii'):
 
@@ -141,8 +199,13 @@ class PLODResource(object):
           self.identifier = None
           return
 
-        g = self._graph()
-        
+        # __init__'s SPARQL stays out of the cache: it builds self._predicates
+        # using str() on each term, while _cached_select() would coerce typed
+        # Literals via Literal.toPython() (xsd:integer -> int, etc.). Routing
+        # this through the cache would change the type contract that
+        # p-lod-api's /id/{id} route serializes directly to JSON.
+        g = _graph()
+
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
@@ -191,7 +254,6 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         self._predicates = predicates
 
     def conceptual_ancestors(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -202,10 +264,9 @@ SELECT DISTINCT ?urn ?label WHERE {
     ?urn a p-lod:concept  .
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }""")
-        return _records(g.query(qt.substitute(identifier = identifier)))
+        return _cached_select(qt.substitute(identifier = identifier))
 
     def conceptual_descendants(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -216,11 +277,9 @@ SELECT DISTINCT ?urn ?label WHERE {
               
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
     def conceptual_children(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -230,14 +289,12 @@ SELECT DISTINCT ?urn ?label WHERE {
       ?urn p-lod:broader p-lod:$identifier .
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
     
     def gather_images(self):
       # return format is urn (of image), depicts_urn, depicts_type, depicts_label, is_best_image, l_record, l_media, l_batch, l_description, geojson
       if self.rdf_type == 'concept':
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -268,11 +325,9 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
 } ORDER BY DESC(?best_image)""")
 
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
       elif self.rdf_type in ['space','property','insula','region']:
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -308,11 +363,9 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
 }""")
         
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
       elif self.rdf_type in ['feature']:
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -344,7 +397,7 @@ UNION
 OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 }""")
         
-        return _records(g.query(qt.substitute(identifier = identifier)))
+        return _cached_select(qt.substitute(identifier = identifier))
       else:
         return self.images_from_luna or []
       
@@ -406,7 +459,6 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
     
 
     def as_predicate(self):
-        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -418,14 +470,12 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         { ?subject p-lod:$identifier ?object . }
         ORDER BY ?subject ?object LIMIT 15000""")
                       
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
     def as_object(self, set_predicate = None ,
                   add_predicate = None,
                   broader = False ):
         
-        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -471,12 +521,12 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         print(query_str)
 
-        results = g.query(query_str)
-
-        records = _records(results)
+        records = _cached_select(query_str)
         if add_predicate is None:
-            for r in records:
-                r.pop('added', None)
+            # Build a fresh list of dicts without 'added'; never mutate the
+            # cached object (diskcache returns fresh deserialized copies, but
+            # avoid any chance of relying on that).
+            records = [{k: v for k, v in r.items() if k != 'added'} for r in records]
         return records
 
     ## get_predicate_values ##
@@ -485,7 +535,6 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         # returns json array of keyed dictionaries.
 
 
-        g = self._graph()
 
         identifier = self.identifier
         if identifier == None:
@@ -496,13 +545,12 @@ PREFIX p-lod: <urn:p-lod:id:>
 SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
 """)
 
-        results = g.query(qt.substitute(identifier = identifier, predicate = predicate))
-        return [_coerce_term(row[0]) for row in results]
+        # SELECT clause is just `?values`, so each cached record is {'values': X}.
+        return [r['values'] for r in _cached_select(qt.substitute(identifier = identifier, predicate = predicate))]
 
 
     ## depicts_concepts ##
     def depicts_concepts(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -541,13 +589,11 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(DISTINCT ?within_depicts ;
 
 } GROUP BY ?urn ?label ORDER BY ?urn""")
 
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
     ## depicted_where ##
     def depicted_where(self, level_of_detail = 'feature'):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -581,29 +627,18 @@ SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batc
                }
 } ORDER BY ?within""")
 
-       # identifier = what you're looking for, level_of_detail = spatial resolution at which to list results 
-        results = g.query(qt.substitute(identifier = identifier, level_of_detail = level_of_detail))
-
-        
-
-        return _records(results)
+       # identifier = what you're looking for, level_of_detail = spatial resolution at which to list results
+        return _cached_select(qt.substitute(identifier = identifier, level_of_detail = level_of_detail))
 
     def rdf_describe(self):
         identifier = self.identifier
-        g = self._graph(return_format=None)
-
         q = f"""
 PREFIX p-lod: <urn:p-lod:id:>
 DESCRIBE p-lod:{identifier}"""
-        
-        results = g.query(q)
-        results = results.serialize(format='turtle').decode('utf-8')
-        return results
+        return _cached_describe(q, return_format='turtle')
 
     def see_also(self):
       identifier = self.identifier
-      g = self._graph(return_format=None)
-
       qt = Template("""
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -620,14 +655,10 @@ WHERE { BIND(p-lod:$identifier AS ?s )
       ?sa_predicate owl:equivalentProperty rdfs:seeAlso .
 }
       """)
-  
-      results = g.query(qt.substitute(identifier = identifier))
-      results = results.serialize(format='turtle').decode('utf-8')
-      return results
+      return _cached_describe(qt.substitute(identifier = identifier), return_format='turtle')
 
    ## spatial_ancestors ##
     def spatial_ancestors(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -649,12 +680,11 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
     }
   }""")
 
-        return _records(g.query(qt.substitute(identifier = identifier)))
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
 ## spatial_children ##
     def spatial_children(self, rdf_type: str = 'all', exclude_rdf_type: str = ''):
-        g = self._graph()
 
         identifier = self.identifier
         if rdf_type == 'all':
@@ -675,13 +705,11 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
       OPTIONAL { ?urn p-lod:geojson ?geojson }
                       }""")
-        results = g.query(qt.substitute(identifier = identifier, rdf_type = rdf_type, exclude_rdf_type = exclude_rdf_type))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier, rdf_type = rdf_type, exclude_rdf_type = exclude_rdf_type))
 
 ## spatially_within
     @property
     def spatially_within(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -696,14 +724,12 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         ?urn p-lod:geojson ?geojson .
         
       } LIMIT 1""")
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
      
 
 ## in_region ##
     @property
     def in_region(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -719,12 +745,11 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         ?urn p-lod:geojson ?geojson .
         
       } LIMIT 1""")
-        return _records(g.query(qt.substitute(identifier = identifier)))
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
 ## instances_of ##
     def instances_of(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -742,26 +767,23 @@ SELECT ?urn ?type ?label ?geojson (COUNT(DISTINCT ?component) AS ?depiction_coun
     OPTIONAL { ?component p-lod:depicts ?urn ;
                a p-lod:artwork-component . }
  } GROUP BY ?urn ?type ?label ?geojson ORDER BY ?urn""")
-        return _records(g.query(qt.substitute(identifier = identifier)))
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
 ## used_as_predicate_by ##
     def used_as_predicate_by(self):
-        g = self._graph()
 
         identifier = self.identifier
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
 ## narrower ##
     @property
     def narrower(self):
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -776,15 +798,13 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
 
 """)
         
-        results = g.query(qt.substitute(identifier = identifier))
-        return _records(results)
+        return _cached_select(qt.substitute(identifier = identifier))
 
 
 ## images_from_luna ##
     @property
     def images_from_luna(self):
 
-        g = self._graph()
 
         identifier = self.identifier
 
@@ -805,8 +825,7 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         ?urn p-lod:x-luna-batch-id ?l_batch .
         ?urn p-lod:x-luna-description ?l_description .
          }""")
-        results = g.query(qt.substitute(identifier = identifier))
-        return [add_luna_info(r) for r in _records(results)]
+        return [add_luna_info(dict(r)) for r in _cached_select(qt.substitute(identifier = identifier))]
 
     def compare_depicts(self, right):
       right_r = PLODResource(right)

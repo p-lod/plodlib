@@ -10,6 +10,7 @@ setup(name='plodlib',
       url='https://github.com/p-lod/plodlib/',
       packages=['plodlib'],
       install_requires=[
+         'diskcache',
          'rdflib>=7.0.0',
          'requests'
         ]
