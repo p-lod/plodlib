@@ -133,8 +133,8 @@ def _graph(return_format='json'):
 
 
 # Optional on-disk SPARQL result cache. Off until enable_cache() is called.
+# _CACHE_TTL_SEC is bound by enable_cache(); _cached_* only read it when _CACHE is not None.
 _CACHE = None
-_CACHE_TTL_SEC = 30 * 60   # default; overridden by enable_cache()
 
 
 def enable_cache(directory='./cache', size_mb=100, ttl_sec=30 * 60):
