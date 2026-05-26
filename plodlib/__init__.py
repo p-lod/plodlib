@@ -733,7 +733,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT ?urn ?type ?label ?geojson (COUNT(?urn) AS ?depiction_count) WHERE
+SELECT ?urn ?type ?label ?geojson (COUNT(DISTINCT ?component) AS ?depiction_count) WHERE
 {   ?urn rdf:type/rdfs:subClassOf* p-lod:$identifier .
 
     OPTIONAL { ?urn a ?type }
