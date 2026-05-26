@@ -12,7 +12,7 @@ from rdflib.plugins.stores import sparqlstore
 
 
 _ENDPOINT = "http://52.170.134.25:3030/plod_endpoint/query"
-_CONNECT_TIMEOUT_SECONDS = 10   # generous for slow / international networks
+_CONNECT_TIMEOUT_SECONDS = 10   # generous for slow networks
 _READ_TIMEOUT_SECONDS = 120     # heavy SPARQL queries can take a while
 
 
@@ -34,8 +34,9 @@ class _TimeoutAdapter(HTTPAdapter):
 # One Session per process (gunicorn worker). Pools HTTP keep-alive
 # connections so subsequent SPARQL queries skip the TCP handshake.
 _SESSION = requests.Session()
-_SESSION.mount('http://', _TimeoutAdapter())
-_SESSION.mount('https://', _TimeoutAdapter())
+_SESSION.mount('http://', _TimeoutAdapter(pool_connections=32, pool_maxsize=32))
+_SESSION.mount('https://', _TimeoutAdapter(pool_connections=32, pool_maxsize=32))
+
 
 
 def luna_tilde_val(luna_urn):
