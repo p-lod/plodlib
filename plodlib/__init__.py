@@ -509,7 +509,7 @@ SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 
-SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(?within_depicts ; separator = '||') AS ?within_spatial_units_depict) WHERE {
+SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(DISTINCT ?within_depicts ; separator = '||') AS ?within_spatial_units_depict) WHERE {
 
   BIND ( p-lod:$identifier AS ?identifier )
 
