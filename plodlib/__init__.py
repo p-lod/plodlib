@@ -6,37 +6,39 @@ from string import Template
 import json
 import requests
 from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 import diskcache
-import rdflib as rdf
-from rdflib.plugins.stores import sparqlstore
 
 
 _ENDPOINT = "http://52.170.134.25:3030/plod_endpoint/query"
-_CONNECT_TIMEOUT_SECONDS = 10   # generous for slow networks
-_READ_TIMEOUT_SECONDS = 120     # heavy SPARQL queries can take a while
 
 
-class _TimeoutAdapter(HTTPAdapter):
-    # requests.Session has no default-timeout knob; without this, a hung
-    # triplestore would block the calling worker indefinitely. Per-request
-    # timeouts passed to .get/.post still win (setdefault leaves them alone).
-    def __init__(self, *args,
-                 timeout=(_CONNECT_TIMEOUT_SECONDS, _READ_TIMEOUT_SECONDS),
-                 **kwargs):
-        self._timeout = timeout
-        super().__init__(*args, **kwargs)
+class PLODQueryError(Exception):
+    """A SPARQL query could not be executed against the triplestore.
 
-    def send(self, request, **kwargs):
-        kwargs.setdefault('timeout', self._timeout)
-        return super().send(request, **kwargs)
+    Wraps the underlying requests exception so callers have one thing to catch
+    regardless of which HTTP library is used underneath.
+    """
 
 
-# One Session per process (gunicorn worker). Pools HTTP keep-alive
-# connections so subsequent SPARQL queries skip the TCP handshake.
+# SPARQL queries are read-only (the endpoint is query-only, there is no update
+# endpoint), so retrying a POST is safe. Worth setting explicitly: requests
+# defaults to Retry(total=0), and POST is not in Retry.DEFAULT_ALLOWED_METHODS,
+# so by default nothing is retried. In a long-running server the triplestore
+# will eventually close a pooled connection just as we start writing to it;
+# without this that surfaces to the caller as a bare ConnectionError.
+_RETRY = Retry(total=2, connect=2, read=2, backoff_factor=0.3,
+               status_forcelist=(502, 503, 504),
+               allowed_methods=frozenset(['GET', 'POST']))
+
+# One Session per process (gunicorn worker). Pools HTTP keep-alive connections
+# so subsequent SPARQL queries skip the TCP handshake, and asks for gzip --
+# these result sets compress about 7x.
 _SESSION = requests.Session()
-_SESSION.mount('http://', _TimeoutAdapter(pool_connections=32, pool_maxsize=32))
-_SESSION.mount('https://', _TimeoutAdapter(pool_connections=32, pool_maxsize=32))
+_adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=_RETRY)
+_SESSION.mount('http://', _adapter)
+_SESSION.mount('https://', _adapter)
 
 
 
@@ -95,41 +97,122 @@ def add_luna_info(row):
   return row
 
 
-def _coerce_term(v):
-    # rdflib URIRef/BNode -> str, Literal -> its xsd-typed Python value,
-    # None or NaN -> None. Leaves already-plain Python values untouched.
-    if v is None:
+_XSD = 'http://www.w3.org/2001/XMLSchema#'
+
+
+def _xsd_boolean(s):
+    # xsd:boolean admits 'true'/'false' and '1'/'0'.
+    return s in ('true', '1')
+
+
+# Datatype -> Python, replacing rdflib's Literal.toPython(). A survey of the
+# store found only xsd:string, xsd:boolean and xsd:double actually stored;
+# xsd:integer arrives from COUNT() aggregates and GROUP_CONCAT returns a plain
+# literal. The integer family is listed out for safety. Everything here is
+# JSON-serializable by construction -- unlike toPython(), which would hand back
+# a datetime if dated literals were ever added to the store.
+_TO_PYTHON = {
+    _XSD + 'string': str,
+    _XSD + 'boolean': _xsd_boolean,
+    _XSD + 'double': float,
+    _XSD + 'float': float,
+    _XSD + 'decimal': float,
+    _XSD + 'integer': int,
+    _XSD + 'int': int,
+    _XSD + 'long': int,
+    _XSD + 'short': int,
+    _XSD + 'byte': int,
+    _XSD + 'nonNegativeInteger': int,
+    _XSD + 'positiveInteger': int,
+    _XSD + 'nonPositiveInteger': int,
+    _XSD + 'negativeInteger': int,
+    _XSD + 'unsignedInt': int,
+    _XSD + 'unsignedLong': int,
+}
+
+
+def _coerce_term(binding):
+    """One SPARQL-JSON binding -> a native Python value.
+
+    URIs and blank nodes become str; typed literals become their xsd value;
+    an unbound variable (absent from the binding) becomes None.
+    """
+    if binding is None:
         return None
-    if isinstance(v, rdf.term.Literal):
+    value = binding['value']
+    if binding.get('type') in ('literal', 'typed-literal'):
+        convert = _TO_PYTHON.get(binding.get('datatype'))
+        if convert is not None:
+            try:
+                return convert(value)
+            except (ValueError, TypeError):
+                return value      # ill-typed literal: hand back the lexical form
+    return value
+
+
+def _lexical(binding):
+    """One SPARQL-JSON binding -> the string rdflib's str(term) would have given.
+
+    PLODResource.__init__ stringifies every term rather than coercing it, and
+    p-lod-api serializes that straight to JSON, so the exact spelling is part of
+    the API contract. Fuseki reports xsd:double in its raw lexical form
+    ('2.337489e0') where rdflib normalizes ('2.337489'); every one of the 1161
+    doubles in the store differs this way, so taking binding['value']
+    unconditionally would change every surface-area value the API returns.
+    """
+    value = binding['value']
+    if binding.get('datatype') in (_XSD + 'double', _XSD + 'float'):
         try:
-            return v.toPython()
-        except Exception:
-            return str(v)
-    if isinstance(v, (rdf.term.URIRef, rdf.term.BNode)):
-        return str(v)
-    if isinstance(v, float) and v != v:
-        return None
-    return v
+            return str(float(value))
+        except (ValueError, TypeError):
+            return value
+    return value
 
 
-def _records(result):
-    # Convert a rdflib SPARQL Result to a list of plain-Python dicts.
-    cols = [str(v) for v in result.vars]
-    return [{c: _coerce_term(row[i]) for i, c in enumerate(cols)}
-            for row in result]
+def _sparql_json(query_string):
+    """Run a SELECT and return the parsed SPARQL-results JSON document."""
+    try:
+        response = _SESSION.post(
+            _ENDPOINT,
+            data={'query': query_string},
+            headers={'Accept': 'application/sparql-results+json',
+                     'Accept-Encoding': 'gzip'})
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise PLODQueryError(f"SPARQL SELECT failed against {_ENDPOINT}: {e}") from e
 
 
-def _graph(return_format='json'):
-    # return_format=None lets the store use its default (xml/turtle), which
-    # is what DESCRIBE / CONSTRUCT queries (rdf_describe, see_also) want.
-    kwargs = {
-        'query_endpoint': _ENDPOINT,
-        'context_aware': False,
-        'session': _SESSION,
-    }
-    if return_format is not None:
-        kwargs['returnFormat'] = return_format
-    return rdf.Graph(sparqlstore.SPARQLStore(**kwargs))
+def _records(doc):
+    """A SPARQL-results JSON document -> a list of plain-Python dicts."""
+    cols = doc['head']['vars']
+    return [{c: _coerce_term(row.get(c)) for c in cols}
+            for row in doc['results']['bindings']]
+
+
+def _sparql_graph(query_string, return_format='turtle'):
+    """Run a DESCRIBE/CONSTRUCT and return the serialized graph as text.
+
+    Fuseki does the serializing, so there is no parse/re-serialize round trip.
+    """
+    mime = {'turtle': 'text/turtle',
+            'xml': 'application/rdf+xml',
+            'nt': 'application/n-triples',
+            'json-ld': 'application/ld+json'}.get(return_format, 'text/turtle')
+    try:
+        response = _SESSION.post(
+            _ENDPOINT,
+            data={'query': query_string},
+            headers={'Accept': mime, 'Accept-Encoding': 'gzip'})
+        response.raise_for_status()
+        # Fuseki returns 'text/turtle' with no charset parameter, and requests
+        # falls back to ISO-8859-1 for text/* without one -- which mojibakes
+        # every non-ASCII label ('ì' -> 'Ã¬'). The RDF 1.1 serializations are
+        # all UTF-8 by specification, so say so rather than letting requests guess.
+        response.encoding = 'utf-8'
+        return response.text
+    except requests.RequestException as e:
+        raise PLODQueryError(f"SPARQL graph query failed against {_ENDPOINT}: {e}") from e
 
 
 # Optional on-disk SPARQL result cache. Off until enable_cache() is called.
@@ -162,29 +245,31 @@ def disable_cache():
         _CACHE = None
 
 
+# Bumped when the shape of cached values changes, so a warm on-disk cache from a
+# previous deploy can't serve stale-shaped entries for the rest of its TTL.
+_CACHE_VERSION = 2
+
+
 def _cached_select(query_string):
     if _CACHE is None:
-        return _records(_graph().query(query_string))
-    key = ('select', query_string)
+        return _records(_sparql_json(query_string))
+    key = ('select', _CACHE_VERSION, query_string)
     hit = _CACHE.get(key)
     if hit is not None:
         return hit
-    records = _records(_graph().query(query_string))
+    records = _records(_sparql_json(query_string))
     _CACHE.set(key, records, expire=_CACHE_TTL_SEC)
     return records
 
 
 def _cached_describe(query_string, return_format='turtle'):
     if _CACHE is None:
-        result = _graph(return_format=None).query(query_string).serialize(format=return_format)
-        return result.decode('utf-8') if isinstance(result, bytes) else result
-    key = ('describe', return_format, query_string)
+        return _sparql_graph(query_string, return_format=return_format)
+    key = ('describe', _CACHE_VERSION, return_format, query_string)
     hit = _CACHE.get(key)
     if hit is not None:
         return hit
-    result = _graph(return_format=None).query(query_string).serialize(format=return_format)
-    if isinstance(result, bytes):
-        result = result.decode('utf-8')
+    result = _sparql_graph(query_string, return_format=return_format)
     _CACHE.set(key, result, expire=_CACHE_TTL_SEC)
     return result
 
@@ -200,23 +285,22 @@ class PLODResource(object):
           return
 
         # __init__'s SPARQL stays out of the cache: it builds self._predicates
-        # using str() on each term, while _cached_select() would coerce typed
-        # Literals via Literal.toPython() (xsd:integer -> int, etc.). Routing
-        # this through the cache would change the type contract that
-        # p-lod-api's /id/{id} route serializes directly to JSON.
-        g = _graph()
-
+        # from the lexical form of each term via _lexical(), while
+        # _cached_select() coerces typed literals to Python values
+        # (xsd:boolean -> bool, etc.). Routing this through the cache would
+        # change the type contract that p-lod-api's /id/{id} route serializes
+        # directly to JSON.
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
 """)
 
-        results = g.query(qt.substitute(identifier = identifier))
+        doc = _sparql_json(qt.substitute(identifier = identifier))
 
         # Bucket (predicate, object) pairs into a dict keyed by predicate URI.
         predicates = {}
-        for p, o in results:
-            predicates.setdefault(str(p), []).append(str(o))
+        for row in doc['results']['bindings']:
+            predicates.setdefault(_lexical(row['p']), []).append(_lexical(row['o']))
 
         self._identifier_parameter = identifier
         self.identifier = identifier if predicates else None
@@ -789,6 +873,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
     ?urn p-lod:broader+ p-lod:$identifier .
     ?urn rdfs:label ?label .
