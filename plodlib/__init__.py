@@ -11,7 +11,7 @@ from urllib3.util.retry import Retry
 import diskcache
 
 
-_ENDPOINT = "http://52.170.134.25:3030/plod_endpoint/query"
+_ENDPOINT = "https://p-lod.org/plod_endpoint/query"
 
 
 class PLODQueryError(Exception):
@@ -32,12 +32,11 @@ _RETRY = Retry(total=2, connect=2, read=2, backoff_factor=0.3,
                status_forcelist=(502, 503, 504),
                allowed_methods=frozenset(['GET', 'POST']))
 
-# One Session per process (gunicorn worker). Pools HTTP keep-alive connections
+# One Session per process (gunicorn worker). Pools HTTPS keep-alive connections
 # so subsequent SPARQL queries skip the TCP handshake, and asks for gzip --
 # these result sets compress about 7x.
 _SESSION = requests.Session()
 _adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=_RETRY)
-_SESSION.mount('http://', _adapter)
 _SESSION.mount('https://', _adapter)
 
 
