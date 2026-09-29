@@ -8,6 +8,13 @@ This will show a list of all the concepts that the Pompeii Artistic Landscape Pr
 
 All of this is in early stages!
 
+## Configuration
+
+- `PLOD_ENDPOINT`: the SPARQL query endpoint. Default: `http://localhost:3030/plod_endpoint/query`
+  (Fuseki on the same machine, as on the p-lod.org server).
+- Every HTTP request has a timeout (5 s connect, 30 s read). A failed or timed-out SPARQL
+  query raises `plodlib.PLODQueryError`.
+
 ## Optional caching
 
 `plodlib` can cache SPARQL query results on disk to speed up repeat lookups

@@ -4,6 +4,7 @@
 from string import Template
 
 import json
+import os
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -11,7 +12,18 @@ from urllib3.util.retry import Retry
 import diskcache
 
 
-_ENDPOINT = "https://p-lod.org/plod_endpoint/query"
+# SPARQL endpoint. Defaults to Fuseki on the same machine: plodlib runs on the
+# p-lod.org server (p-lod-api, p-lod-browser), and querying localhost avoids
+# looping back through Apache's public HTTPS address -- under heavy load Apache
+# and p-lod-api ended up waiting on each other (api.p-lod.org deadlock,
+# 2026-09-28/29). Set PLOD_ENDPOINT to use a different endpoint.
+_ENDPOINT = os.environ.get("PLOD_ENDPOINT", "http://localhost:3030/plod_endpoint/query")
+
+# (connect, read) timeouts in seconds for every HTTP request. Without them a
+# request can wait forever -- which is how the 2026-09-28/29 deadlock held
+# every worker thread. Read timeout is below Fuseki's 60 s query timeout;
+# plodlib's queries normally return in milliseconds.
+_TIMEOUT = (5, 30)
 
 
 class PLODQueryError(Exception):
@@ -38,6 +50,7 @@ _RETRY = Retry(total=2, connect=2, read=2, backoff_factor=0.3,
 _SESSION = requests.Session()
 _adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=_RETRY)
 _SESSION.mount('https://', _adapter)
+_SESSION.mount('http://', _adapter)   # the default endpoint is http://localhost:3030
 
 
 
@@ -61,7 +74,7 @@ def add_luna_info(row):
   if row['urn'].startswith("urn:p-lod:id:luna_img_PPM"):
     tilde_val = "16"
   
-  luna_json = json.loads(requests.get(f'https://umassamherst.lunaimaging.com/luna/servlet/as/fetchMediaSearch?mid=umass~{tilde_val}~{tilde_val}~{row["l_record"]}~{row["l_media"]}&fullData=true').text)
+  luna_json = json.loads(requests.get(f'https://umassamherst.lunaimaging.com/luna/servlet/as/fetchMediaSearch?mid=umass~{tilde_val}~{tilde_val}~{row["l_record"]}~{row["l_media"]}&fullData=true', timeout=_TIMEOUT).text)
   
   if len(luna_json):
 
@@ -175,7 +188,8 @@ def _sparql_json(query_string):
             _ENDPOINT,
             data={'query': query_string},
             headers={'Accept': 'application/sparql-results+json',
-                     'Accept-Encoding': 'gzip'})
+                     'Accept-Encoding': 'gzip'},
+            timeout=_TIMEOUT)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
@@ -202,7 +216,8 @@ def _sparql_graph(query_string, return_format='turtle'):
         response = _SESSION.post(
             _ENDPOINT,
             data={'query': query_string},
-            headers={'Accept': mime, 'Accept-Encoding': 'gzip'})
+            headers={'Accept': mime, 'Accept-Encoding': 'gzip'},
+            timeout=_TIMEOUT)
         response.raise_for_status()
         # Fuseki returns 'text/turtle' with no charset parameter, and requests
         # falls back to ISO-8859-1 for text/* without one -- which mojibakes
