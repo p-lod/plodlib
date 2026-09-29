@@ -288,6 +288,19 @@ def _cached_describe(query_string, return_format='turtle'):
     return result
 
 
+# Every query names the resource by full IRI, <urn:p-lod:id:$identifier>, not
+# as a prefixed name (p-lod:$identifier): many ids -- pig's_head,
+# animals_(mythological), border,_vertical -- are not legal prefixed names and
+# made Fuseki answer 400. Characters that can't appear in an IRI at all are
+# rejected up front, so an id can't break out of the <...>.
+_IRI_FORBIDDEN = set('<>"{}|^`\\')
+
+
+def _valid_id(identifier):
+    return (isinstance(identifier, str)
+            and not any(c in _IRI_FORBIDDEN or ord(c) <= 0x20 for c in identifier))
+
+
 # Define a class
 class PLODResource(object):
 
@@ -306,10 +319,14 @@ class PLODResource(object):
         # directly to JSON.
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
+SELECT ?p ?o WHERE { <urn:p-lod:id:$identifier> ?p ?o . }
 """)
 
-        doc = _sparql_json(qt.substitute(identifier = identifier))
+        if _valid_id(identifier):
+            doc = _sparql_json(qt.substitute(identifier = identifier))
+        else:
+            # Can't be part of an IRI, so can't exist in the store: not found.
+            doc = {'results': {'bindings': []}}
 
         # Bucket (predicate, object) pairs into a dict keyed by predicate URI.
         predicates = {}
@@ -358,7 +375,7 @@ SELECT ?p ?o WHERE { p-lod:$identifier ?p ?o . }
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?label WHERE { 
-  p-lod:$identifier p-lod:broader* ?urn .
+  <urn:p-lod:id:$identifier> p-lod:broader* ?urn .
     ?urn a p-lod:concept  .
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }""")
@@ -371,7 +388,7 @@ SELECT DISTINCT ?urn ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?label WHERE {
-       ?urn p-lod:broader+  p-lod:$identifier.
+       ?urn p-lod:broader+  <urn:p-lod:id:$identifier>.
               
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
@@ -384,7 +401,7 @@ SELECT DISTINCT ?urn ?label WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?label WHERE {
-      ?urn p-lod:broader p-lod:$identifier .
+      ?urn p-lod:broader <urn:p-lod:id:$identifier> .
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
                       }""")
         return _cached_select(qt.substitute(identifier = identifier))
@@ -396,32 +413,33 @@ SELECT DISTINCT ?urn ?label WHERE {
 
         identifier = self.identifier
 
+        # Find the distinct (image, feature) pairs first, then fetch the Luna
+        # fields once per pair. ?best_image is always true (kept for the
+        # return format).
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_description ?l_img_url ?feature WHERE {
-   
-    BIND ( p-lod:$identifier AS ?identifier )
-   
-    { ?component p-lod:depicts ?identifier . }
-    UNION
-    { ?component p-lod:depicts/p-lod:broader+ ?identifier }
 
-    OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
-               ?feature a p-lod:feature .
-               OPTIONAL { ?feature p-lod:geojson ?geojson } }
+  { SELECT DISTINCT ?urn ?feature WHERE {
+      { ?component p-lod:depicts <urn:p-lod:id:$identifier> . }
+      UNION
+      { ?narrower p-lod:broader+ <urn:p-lod:id:$identifier> .
+        ?component p-lod:depicts ?narrower . }
+      ?component p-lod:best-image ?urn .
+      OPTIONAL { ?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
+                 ?feature a p-lod:feature . }
+  } }
 
-               BIND ( true AS ?best_image)
-               ?component p-lod:best-image ?urn .
-               ?urn p-lod:x-luna-record-id   ?l_record .
-               ?urn p-lod:x-luna-media-id    ?l_media .
-               ?urn p-lod:x-luna-batch-id    ?l_batch . 
-               ?urn p-lod:x-luna-description ?l_description .
-               ?urn p-lod:x-luna-url-3       ?l_img_url .
-               OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-
-} ORDER BY DESC(?best_image)""")
+  BIND ( true AS ?best_image )
+  ?urn p-lod:x-luna-record-id   ?l_record .
+  ?urn p-lod:x-luna-media-id    ?l_media .
+  ?urn p-lod:x-luna-batch-id    ?l_batch .
+  ?urn p-lod:x-luna-description ?l_description .
+  ?urn p-lod:x-luna-url-3       ?l_img_url .
+  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+}""")
 
         return _cached_select(qt.substitute(identifier = identifier))
 
@@ -429,38 +447,45 @@ SELECT DISTINCT ?urn ?label ?best_image ?l_record ?l_media ?l_batch ?l_descripti
 
         identifier = self.identifier
 
+        # Walk down from the identifier to its features, then to the artworks
+        # on them and their components. The old form walked down with
+        # ^spatially-within*/^created-on-surface-of*/^is-part-of* to everything
+        # below the identifier and back up again from each component, and
+        # started from all 94 k depicts triples in the first branch: ~0.6 s
+        # even for a room with a handful of images, 2-50x slower overall.
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
 
-BIND ( p-lod:$identifier AS ?identifier )
-{
-?urn p-lod:depicts ?feature .
-?feature a p-lod:feature .
-?identifier ^p-lod:spatially-within+ ?feature .
-}
-UNION 
-{
+  { SELECT DISTINCT ?urn ?feature WHERE {
+      {
+        # Luna images that depict a feature within the identifier.
+        ?feature p-lod:spatially-within+ <urn:p-lod:id:$identifier> .
+        ?feature a p-lod:feature .
+        ?urn p-lod:depicts ?feature .
+      }
+      UNION
+      {
+        # Best images of artwork components on those features.
+        ?feature p-lod:spatially-within* <urn:p-lod:id:$identifier> .
+        ?feature a p-lod:feature .
+        ?artwork p-lod:created-on-surface-of ?feature .
+        ?component p-lod:is-part-of+ ?artwork .
+        ?component p-lod:best-image ?urn .
+      }
+  } }
 
-?identifier ^p-lod:spatially-within*/^p-lod:created-on-surface-of*/^p-lod:is-part-of* ?component .
-?component p-lod:best-image ?urn .
+  ?urn p-lod:x-luna-record-id ?l_record .
+  ?urn p-lod:x-luna-media-id  ?l_media .
+  ?urn p-lod:x-luna-batch-id  ?l_batch .
+  ?urn p-lod:x-luna-description ?l_description .
+  ?urn p-lod:x-luna-url-3       ?l_img_url .
 
-?component p-lod:is-part-of+/p-lod:created-on-surface-of ?feature .
-?feature a p-lod:feature .
-}
-
-?urn p-lod:x-luna-record-id ?l_record .
-?urn p-lod:x-luna-media-id  ?l_media .
-?urn p-lod:x-luna-batch-id  ?l_batch .
-?urn p-lod:x-luna-description ?l_description .
-?urn p-lod:x-luna-url-3       ?l_img_url .
-
-OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
-
+  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 }""")
-        
+
         return _cached_select(qt.substitute(identifier = identifier))
 
       elif self.rdf_type in ['feature']:
@@ -473,8 +498,8 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_img_url ?feature ?l_description WHERE {
 
-BIND ( p-lod:$identifier AS ?identifier )
-BIND ( p-lod:$identifier AS ?feature )
+BIND ( <urn:p-lod:id:$identifier> AS ?identifier )
+BIND ( <urn:p-lod:id:$identifier> AS ?feature )
 {
 ?urn p-lod:depicts ?identifier .
 }
@@ -538,12 +563,16 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
             print("Failed to parse geojson")
 
         # note that depicted_where will return an empty list so check length after calling
+        # One feature per depicting space. (Via depicted_where this was one
+        # per depicting image -- the same space repeated -- and since the
+        # _records type contract it returned [] whenever any space lacked
+        # geojson: the test was != 'None', but unbound is now None.)
         else:
-          dw_d = self.depicted_where(level_of_detail='space')
+          dw_d = self._depicted_space_geojson()
           if len(dw_d):
             my_geojson_d = {"type": "FeatureCollection", "features": []}
             for g in dw_d:
-              if g['geojson'] != 'None':
+              if g['geojson'] is not None:
                 my_geojson_d['features'].append(json.loads(g['geojson']))
             my_geojson = my_geojson_d
           else:
@@ -565,7 +594,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         qt = Template("""
         PREFIX p-lod: <urn:p-lod:id:>
         SELECT ?subject ?object WHERE 
-        { ?subject p-lod:$identifier ?object . }
+        { ?subject <urn:p-lod:id:$identifier> ?object . }
         ORDER BY ?subject ?object LIMIT 15000""")
                       
         return _cached_select(qt.substitute(identifier = identifier))
@@ -593,7 +622,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
           UNION
           {{
           ?subject {set_predicate_str} ?broader_start .
-          ?broader_start p-lod:broader+ p-lod:{identifier} .
+          ?broader_start p-lod:broader+ <urn:p-lod:id:{identifier}> .
           }}
            """
 
@@ -602,7 +631,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
         SELECT ?subject ?predicate ?added WHERE 
         {
           {
-          ?subject $set_predicate_str p-lod:$identifier .
+          ?subject $set_predicate_str <urn:p-lod:id:$identifier> .
           }
           $broader_union_str
                       
@@ -616,8 +645,6 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
                                   broader_union_str = broader_union_str,
                                   set_predicate_str = set_predicate_str ,
                                   add_predicate_str = add_predicate_str )
-
-        print(query_str)
 
         records = _cached_select(query_str)
         if add_predicate is None:
@@ -640,7 +667,7 @@ OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label}
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT ?values WHERE { p-lod:$identifier <$predicate> ?values . }
+SELECT ?values WHERE { <urn:p-lod:id:$identifier> <$predicate> ?values . }
 """)
 
         # SELECT clause is just `?values`, so each cached record is {'values': X}.
@@ -657,7 +684,7 @@ PREFIX p-lod: <urn:p-lod:id:>
 
 SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(DISTINCT ?within_depicts ; separator = '||') AS ?within_spatial_units_depict) WHERE {
 
-  BIND ( p-lod:$identifier AS ?identifier )
+  BIND ( <urn:p-lod:id:$identifier> AS ?identifier )
 
   ?identifier ^p-lod:spatially-within*/^p-lod:created-on-surface-of*/^p-lod:is-part-of* ?component .
   ?component a p-lod:artwork-component .
@@ -693,48 +720,70 @@ SELECT ?urn ?label (COUNT(*) AS ?count) (GROUP_CONCAT(DISTINCT ?within_depicts ;
 
 
     ## depicted_where ##
+    # Components that depict the identifier: directly, via a narrower concept,
+    # or (for a wall-painting style) by being part of an artwork on a styled
+    # feature. Shared by depicted_where() and the virtual geojson.
+    _DEPICTING_COMPONENTS = """
+      { ?component p-lod:depicts <urn:p-lod:id:$identifier> . }
+      UNION
+      { ?narrower p-lod:broader+ <urn:p-lod:id:$identifier> .
+        ?component p-lod:depicts ?narrower . }
+      UNION
+      { ?styled p-lod:has-pompeian-wall-painting-style <urn:p-lod:id:$identifier> .
+        ?artwork p-lod:created-on-surface-of ?styled .
+        ?component p-lod:is-part-of+ ?artwork . }
+      ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
+      ?urn a p-lod:$level_of_detail ."""
+
     def depicted_where(self, level_of_detail = 'feature'):
 
         identifier = self.identifier
 
+        # Distinct (component, place) pairs first, then the per-place and
+        # per-image OPTIONALs once per pair.
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?l_description ?l_img_url ?geojson  WHERE {
-    
-    BIND ( p-lod:$identifier AS ?identifier )
-   
-    { ?component p-lod:depicts ?identifier }
-    UNION
-    { ?identifier ^p-lod:broader+/^p-lod:depicts ?component }
-    UNION
-    { ?identifier ^p-lod:has-pompeian-wall-painting-style/^p-lod:created-on-surface-of/^p-lod:is-part-of+ ?component }
-    
-    ?component p-lod:is-part-of+/p-lod:created-on-surface-of/p-lod:spatially-within* ?urn .
-    ?urn a p-lod:$level_of_detail
-    OPTIONAL { ?urn a ?type }
-    OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
-    OPTIONAL { ?urn p-lod:spatially-within ?within }
-    OPTIONAL { ?urn p-lod:geojson ?geojson }
- 
-    OPTIONAL { ?component p-lod:has-action ?action . }
-    OPTIONAL { ?component p-lod:has-color  ?color . }
-    OPTIONAL { ?component p-lod:best-image ?best_image .
-               ?best_image p-lod:x-luna-record-id ?l_record .
-               ?best_image p-lod:x-luna-media-id  ?l_media .
-               ?best_image p-lod:x-luna-batch-id  ?l_batch .
-               ?best_image p-lod:x-luna-description ?l_description .
-               ?best_image p-lod:x-luna-url-3    ?l_img_url .
-               }
+SELECT DISTINCT ?urn ?type ?label ?within ?best_image ?l_record ?l_media ?l_batch ?l_description ?l_img_url ?geojson WHERE {
+
+  { SELECT DISTINCT ?component ?urn WHERE {""" + self._DEPICTING_COMPONENTS + """
+  } }
+
+  OPTIONAL { ?urn a ?type }
+  OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
+  OPTIONAL { ?urn p-lod:spatially-within ?within }
+  OPTIONAL { ?urn p-lod:geojson ?geojson }
+  OPTIONAL { ?component p-lod:best-image ?best_image .
+             ?best_image p-lod:x-luna-record-id ?l_record .
+             ?best_image p-lod:x-luna-media-id  ?l_media .
+             ?best_image p-lod:x-luna-batch-id  ?l_batch .
+             ?best_image p-lod:x-luna-description ?l_description .
+             ?best_image p-lod:x-luna-url-3    ?l_img_url .
+             }
 } ORDER BY ?within""")
 
        # identifier = what you're looking for, level_of_detail = spatial resolution at which to list results
         return _cached_select(qt.substitute(identifier = identifier, level_of_detail = level_of_detail))
 
+    def _depicted_space_geojson(self):
+        """Distinct spaces depicting the identifier, with their geojson (or None).
+
+        What the virtual geojson needs from depicted_where(level_of_detail='space'),
+        without the per-image rows and Luna fields.
+        """
+        qt = Template("""
+PREFIX p-lod: <urn:p-lod:id:>
+SELECT ?urn ?geojson WHERE {
+  { SELECT DISTINCT ?urn WHERE {""" + self._DEPICTING_COMPONENTS + """
+  } }
+  OPTIONAL { ?urn p-lod:geojson ?geojson }
+} ORDER BY ?urn""")
+        return _cached_select(qt.substitute(identifier = self.identifier, level_of_detail = 'space'))
+
     def rdf_describe(self):
         identifier = self.identifier
         q = f"""
 PREFIX p-lod: <urn:p-lod:id:>
-DESCRIBE p-lod:{identifier}"""
+DESCRIBE <urn:p-lod:id:{identifier}>"""
         return _cached_describe(q, return_format='turtle')
 
     def see_also(self):
@@ -750,7 +799,7 @@ CONSTRUCT {
 
 }
 
-WHERE { BIND(p-lod:$identifier AS ?s )
+WHERE { BIND(<urn:p-lod:id:$identifier> AS ?s )
     ?s ?sa_predicate ?o .
       ?sa_predicate owl:equivalentProperty rdfs:seeAlso .
 }
@@ -765,7 +814,7 @@ WHERE { BIND(p-lod:$identifier AS ?s )
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?type ?label ?geojson WHERE { 
-  { p-lod:$identifier p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
+  { <urn:p-lod:id:$identifier> p-lod:is-part-of*/p-lod:created-on-surface-of* ?feature .
     ?feature p-lod:spatially-within* ?urn .
     ?feature a p-lod:feature  .
     OPTIONAL { ?urn a ?type }
@@ -773,7 +822,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
     }
     UNION
-    { p-lod:$identifier p-lod:spatially-within* ?urn  . 
+    { <urn:p-lod:id:$identifier> p-lod:spatially-within* ?urn  . 
       OPTIONAL { ?urn a ?type }
       OPTIONAL { ?urn p-lod:geojson ?geojson }
       OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
@@ -798,7 +847,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
 SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
-      ?urn p-lod:spatially-within p-lod:$identifier .
+      ?urn p-lod:spatially-within <urn:p-lod:id:$identifier> .
       $rdf_type
       $exclude_rdf_type
       OPTIONAL { ?urn a ?type }
@@ -817,7 +866,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
     PREFIX p-lod: <urn:p-lod:id:>
     SELECT ?urn ?type ?label ?geojson WHERE {
 
-        p-lod:$identifier p-lod:spatially-within ?urn  . 
+        <urn:p-lod:id:$identifier> p-lod:spatially-within ?urn  . 
 
         ?urn a ?type .
         OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label  }
@@ -837,7 +886,7 @@ SELECT DISTINCT ?urn ?type ?label ?geojson WHERE {
     PREFIX p-lod: <urn:p-lod:id:>
     SELECT ?urn ?type ?label ?geojson WHERE {
 
-        p-lod:$identifier p-lod:spatially-within+ ?urn  . 
+        <urn:p-lod:id:$identifier> p-lod:spatially-within+ ?urn  . 
 
         ?urn a ?type .
         ?urn a p-lod:region .
@@ -859,7 +908,7 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT ?urn ?type ?label ?geojson (COUNT(DISTINCT ?component) AS ?depiction_count) WHERE
-{   ?urn rdf:type/rdfs:subClassOf* p-lod:$identifier .
+{   ?urn rdf:type/rdfs:subClassOf* <urn:p-lod:id:$identifier> .
 
     OPTIONAL { ?urn a ?type }
     OPTIONAL { ?urn <http://www.w3.org/2000/01/rdf-schema#label> ?label }
@@ -877,7 +926,10 @@ SELECT ?urn ?type ?label ?geojson (COUNT(DISTINCT ?component) AS ?depiction_coun
 
         qt = Template("""
 PREFIX p-lod: <urn:p-lod:id:>
-SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
+SELECT ?subject ?object WHERE { ?subject <urn:p-lod:id:$identifier> ?object}""")
+        # No DISTINCT: with the predicate fixed, (subject, object) pairs are
+        # already unique (a graph is a set of triples); DISTINCT only cost a
+        # hash of up to 290 k rows.
         return _cached_select(qt.substitute(identifier = identifier))
 
 
@@ -891,7 +943,7 @@ SELECT DISTINCT ?subject ?object WHERE { ?subject p-lod:$identifier ?object}""")
 PREFIX p-lod: <urn:p-lod:id:>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
-    ?urn p-lod:broader+ p-lod:$identifier .
+    ?urn p-lod:broader+ <urn:p-lod:id:$identifier> .
     ?urn rdfs:label ?label .
 
     BIND ( IF(EXISTS { ?x p-lod:depicts ?urn }, "true", "false") AS ?is_depicted )
@@ -915,9 +967,9 @@ SELECT DISTINCT ?urn ?label ?is_depicted WHERE {
         SELECT DISTINCT ?urn ?label ?l_record ?l_media ?l_batch ?l_description
         WHERE {
 
-       {?urn p-lod:depicts p-lod:$identifier .}
+       {?urn p-lod:depicts <urn:p-lod:id:$identifier> .}
         UNION
-        {p-lod:$identifier p-lod:best-image ?urn}
+        {<urn:p-lod:id:$identifier> p-lod:best-image ?urn}
 
         ?urn a p-lod:luna-image .
         ?urn rdfs:label ?label .
